@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use nalgebra::{dmatrix, DMatrix};
+use nalgebra::{dmatrix, DVector, DMatrix};
 
 struct ModelPreset {
     pub constant_velocity_and_static_box_size_2d: HashMap<String, usize>,
@@ -17,5 +17,11 @@ impl ModelPreset {
         let cutoff = order + 1;
 
         DMatrix::from(block.index((0..cutoff, 0..cutoff)))
+    }
+
+    pub fn _zero_pad(arr: DMatrix<f64>, length: usize) -> DVector<f64> {
+        let mut ret = DVector::zeros(length);
+        ret.index_mut((0.., 0..arr.shape().0)).copy_from(&arr);
+        ret
     }
 }

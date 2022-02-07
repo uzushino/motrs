@@ -19,9 +19,23 @@ impl ModelPreset {
         DMatrix::from(block.index((0..cutoff, 0..cutoff)))
     }
 
-    pub fn _zero_pad(arr: DMatrix<f64>, length: usize) -> DVector<f64> {
+    pub fn _zero_pad(arr: DVector<f64>, length: usize) -> DVector<f64> {
         let mut ret = DVector::zeros(length);
-        ret.index_mut((0.., 0..arr.shape().0)).copy_from(&arr);
+        ret.index_mut((..arr.shape().0, ..)).copy_from(&arr);
         ret
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use nalgebra::dvector;
+    use super::ModelPreset;
+
+    #[test]
+    fn test_zero_pad() {
+        let arr = dvector![1., 2., 3.];
+        let pad_arr = ModelPreset::_zero_pad(arr, 5);
+
+        assert!(pad_arr == dvector![1., 2., 3., 0., 0.])
     }
 }

@@ -35,6 +35,13 @@ pub struct Model {
     r_var_pos: f64,
     r_var_size: f64,
     p_cov_p0: f64,
+    dim_box: i64,
+    pos_idxs: Vec<usize>,
+    size_idxs: Vec<usize>,
+    z_in_x_ids: Vec<usize>,
+    offset_idx: usize,
+    state_length: usize,
+    measurement_length: usize
 }
 
 impl Model {
@@ -50,7 +57,7 @@ impl Model {
         r_var_size: f64,
         p_cov_p0: f64
     ) -> Self {
-        Model {
+        let mut model = Model {
             dt,
             order_pos,
             dim_pos,
@@ -61,7 +68,7 @@ impl Model {
             r_var_pos,
             r_var_size,
             p_cov_p0
-        }
+        };
     }
 }
 #[cfg(test)]

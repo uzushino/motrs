@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::cmp::max;
 use nalgebra::{dmatrix, DVector, DMatrix};
 
 struct ModelPreset {
@@ -47,8 +48,8 @@ pub struct Model {
 impl Model {
     pub fn new(
         dt: f64,
-        order_pos: i64,
-        dim_pos: i64,
+        order_pos: usize,
+        dim_pos: usize,
         order_size: usize,
         dim_size: usize,
         q_var_pos: f64,
@@ -57,18 +58,21 @@ impl Model {
         r_var_size: f64,
         p_cov_p0: f64
     ) -> Self {
-        let mut model = Model {
-            dt,
-            order_pos,
-            dim_pos,
-            order_size,
-            dim_size,
-            q_var_pos,
-            q_var_size,
-            r_var_pos,
-            r_var_size,
-            p_cov_p0
-        };
+        let dim_box = 2 * max(dim_pos, dim_size);
+        let (pos_idxs, size_idxs, z_in_idxs, offset_idx) = Self::_calc_idxs();
+        let state_length = dim_pos * (order_pos + 1) +
+            dim_size * (order_size + 1);
+        let measurement_length = dim_pos + dim_size;
+    }
+
+    fn _calc_idxs(dim_pos: usize, dim_size: usize, order_pos: usize, order_size: usize) -> (Vec<usize>, Vec<usize>, Vec<usize>, usize) {
+        let offset_idx = max(dim_pos, dim_size);
+        let pos_idxs: Vec<usize> = (0..dim_pos).map(|pidx| pidx * (order_pos + 1)).collect();
+        let mut size_idxs: Vec<usize> = (0..dim_size).map(|sidx| dim_pos * (order_pos + 1) + sidx * (order_size + 1)).collect();
+        let z_in_idxs = pos_idxs.clone();
+        z_in_idxs.append(&mut size_idxs);
+
+        (pos_idxs, size_idxs, z_in_idxs, offset_idx)
     }
 }
 #[cfg(test)]

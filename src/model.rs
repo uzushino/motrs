@@ -42,7 +42,7 @@ pub struct Model {
     z_in_x_ids: Vec<usize>,
     offset_idx: usize,
     state_length: usize,
-    measurement_length: usize
+    measurement_lengths: usize
 }
 
 impl Model {
@@ -60,9 +60,28 @@ impl Model {
     ) -> Self {
         let dim_box = 2 * max(dim_pos, dim_size);
         let (pos_idxs, size_idxs, z_in_idxs, offset_idx) = Self::_calc_idxs();
-        let state_length = dim_pos * (order_pos + 1) +
-            dim_size * (order_size + 1);
+        let state_length = dim_pos * (order_pos + 1) + dim_size * (order_size + 1);
         let measurement_length = dim_pos + dim_size;
+
+        Self {
+            dt,
+            dim_box,
+            dim_pos,
+            dim_size,
+            pos_idxs,
+            size_idxs,
+            order_pos,
+            order_size,
+            q_var_pos,
+            q_var_size,
+            r_var_pos,
+            r_var_size,
+            p_cov_p0,
+            z_in_x_ids,
+            offset_idx,
+            state_length,
+            measurement_lengths
+        }
     }
 
     fn _calc_idxs(dim_pos: usize, dim_size: usize, order_pos: usize, order_size: usize) -> (Vec<usize>, Vec<usize>, Vec<usize>, usize) {

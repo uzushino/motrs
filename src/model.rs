@@ -25,10 +25,14 @@ fn zero_pad(arr: DVector<f64>, length: usize) -> DVector<f64> {
     ret
 }
 
+fn repeat_vec<T>(x: Vec<T>, size: usize) -> Vec<T> {
+    x.iter().cycle().take(x.len() * size).map(|v| *v.clone()).collect::<Vec<_>>()
+}
+
 pub struct Model {
     dt: f64,
-    order_pos: i64,
-    dim_pos: i64,
+    order_pos: usize,
+    dim_pos: usize,
     order_size: usize,
     dim_size: usize,
     q_var_pos: f64,
@@ -36,7 +40,7 @@ pub struct Model {
     r_var_pos: f64,
     r_var_size: f64,
     p_cov_p0: f64,
-    dim_box: i64,
+    dim_box: usize,
     pos_idxs: Vec<usize>,
     size_idxs: Vec<usize>,
     z_in_x_ids: Vec<usize>,
@@ -59,9 +63,9 @@ impl Model {
         p_cov_p0: f64
     ) -> Self {
         let dim_box = 2 * max(dim_pos, dim_size);
-        let (pos_idxs, size_idxs, z_in_idxs, offset_idx) = Self::_calc_idxs();
+        let (pos_idxs, size_idxs, z_in_x_ids, offset_idx) = Self::_calc_idxs();
         let state_length = dim_pos * (order_pos + 1) + dim_size * (order_size + 1);
-        let measurement_length = dim_pos + dim_size;
+        let measurement_lengths = dim_pos + dim_size;
 
         Self {
             dt,
@@ -93,7 +97,25 @@ impl Model {
 
         (pos_idxs, size_idxs, z_in_idxs, offset_idx)
     }
+
+
+    pub fn build_F(&self) {
+        let block_pos = base_dim_block(self.dt, self.order_pos);
+        let block_size = base_dim_block(self.dt, self.order_size);
+
+        let diag_components = { 
+            let _block_pos = repeat_vec(vec![block_pos], self.dim_pos);
+            let _block_size = repeat_vec(vec![block_size], self.dim_size);
+            let mut diag_components = Vec::new();
+            diag_components.extend(_block_pos);
+            diag_components.extend(_block_size);
+            diag_components
+        };
+        
+        block_diag(*diag_components);
+    }
 }
+
 #[cfg(test)]
 mod test {
     use nalgebra::dvector;

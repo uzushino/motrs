@@ -107,8 +107,10 @@ impl Model {
             let _block_pos = repeat_vec(vec![block_pos], self.dim_pos);
             let _block_size = repeat_vec(vec![block_size], self.dim_size);
             let mut diag_components = Vec::new();
+
             diag_components.extend(_block_pos);
             diag_components.extend(_block_size);
+
             diag_components
         };
         
@@ -127,5 +129,11 @@ mod test {
         let pad_arr = zero_pad(arr, 5);
 
         assert!(pad_arr == dvector![1., 2., 3., 0., 0.])
+    }
+    
+    #[test]
+    fn test_repeat_vec() {
+        let arr = vec![1., 2., 3.];
+        assert!(repeat_vec(arr, 3) == vec![1., 2., 3., 1., 2., 3., 1., 2., 3.])
     }
 }

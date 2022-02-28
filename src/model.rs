@@ -29,6 +29,10 @@ fn repeat_vec<T>(x: Vec<T>, size: usize) -> Vec<T> {
     x.iter().cycle().take(x.len() * size).map(|v| *v.clone()).collect::<Vec<_>>()
 }
 
+fn block_diag() {
+
+}
+
 pub struct Model {
     dt: f64,
     order_pos: usize,
@@ -103,7 +107,7 @@ impl Model {
         let block_pos = base_dim_block(self.dt, self.order_pos);
         let block_size = base_dim_block(self.dt, self.order_size);
 
-        let diag_components = { 
+        let diag_components = {
             let _block_pos = repeat_vec(vec![block_pos], self.dim_pos);
             let _block_size = repeat_vec(vec![block_size], self.dim_size);
             let mut diag_components = Vec::new();
@@ -113,7 +117,7 @@ impl Model {
 
             diag_components
         };
-        
+
         block_diag(*diag_components);
     }
 }
@@ -130,10 +134,29 @@ mod test {
 
         assert!(pad_arr == dvector![1., 2., 3., 0., 0.])
     }
-    
+
     #[test]
     fn test_repeat_vec() {
         let arr = vec![1., 2., 3.];
         assert!(repeat_vec(arr, 3) == vec![1., 2., 3., 1., 2., 3., 1., 2., 3.])
+    }
+
+    #[test]
+    fn test_block_diag() {
+        let a = vec![vec![1., 1.], vec![0., 1.]];
+        let b = vec![vec![1., 1.], vec![0., 1.]];
+        let c = vec![vec![1.]];
+        let d = vec![vec![1.]];
+
+        let expect = vec![
+            vec![1., 1., 0., 0., 0., 0.],
+            vec![0., 1., 0., 0., 0., 0.],
+            vec![0., 0., 1., 1., 0., 0.],
+            vec![0., 0., 0., 1., 0., 0.],
+            vec![0., 0., 0., 0., 1., 0.],
+            vec![0., 0., 0., 0., 0., 1.]
+        ];
+
+        assert!(block_diag(a, b, c, d) == expect);
     }
 }

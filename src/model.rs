@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::cmp::max;
-use nalgebra::{dmatrix, DVector, DMatrix};
+use nalgebra::{dmatrix, DVector, DMatrix, Matrix2x1};
 
 struct ModelPreset {
     pub constant_velocity_and_static_box_size_2d: HashMap<String, usize>,
@@ -25,12 +25,36 @@ fn zero_pad(arr: DVector<f64>, length: usize) -> DVector<f64> {
     ret
 }
 
-fn repeat_vec<T>(x: Vec<T>, size: usize) -> Vec<T> {
-    x.iter().cycle().take(x.len() * size).map(|v| *v.clone()).collect::<Vec<_>>()
+fn repeat_vec<T: Clone>(x: Vec<T>, size: usize) -> Vec<T> {
+    x.iter().cycle().take(x.len() * size).map(|v| v.clone()).collect::<Vec<_>>()
 }
 
-fn block_diag() {
+fn block_diag(arrs: Vec<DMatrix<f64>>) -> DMatrix<f64> {
+    let shapes = arrs
+        .iter()
+        .map(|m| {
+            let (a, b) = m.shape();
+            vec![a, b]
+        })
+        .collect::<Vec<_>>();
 
+    let sum_shapes = DMatrix::from_row_slice(3, 2, shapes.clone().into_iter().flatten().collect::<Vec<_>>().as_slice());
+    let sum_shape = sum_shapes.row_sum();
+
+    let mut out = DMatrix::zeros(sum_shape[(0, 0)], sum_shape[(0, 1)]);
+
+    let mut r = 0;
+    let mut c = 0;
+
+    for (i, sh) in shapes.iter().enumerate() {
+        let rr = sh[0];
+        let cc = sh[1];
+        out.index_mut((r..(r+rr), c..(c+cc))).copy_from(&arrs[i]);
+        r += rr;
+        c += cc;
+    }
+
+    out
 }
 
 pub struct Model {
@@ -67,7 +91,8 @@ impl Model {
         p_cov_p0: f64
     ) -> Self {
         let dim_box = 2 * max(dim_pos, dim_size);
-        let (pos_idxs, size_idxs, z_in_x_ids, offset_idx) = Self::_calc_idxs();
+        let (pos_idxs, size_idxs, z_in_x_ids, offset_idx) =
+            Self::_calc_idxs(dim_pos, dim_size, order_pos, order_size);
         let state_length = dim_pos * (order_pos + 1) + dim_size * (order_size + 1);
         let measurement_lengths = dim_pos + dim_size;
 
@@ -96,7 +121,7 @@ impl Model {
         let offset_idx = max(dim_pos, dim_size);
         let pos_idxs: Vec<usize> = (0..dim_pos).map(|pidx| pidx * (order_pos + 1)).collect();
         let mut size_idxs: Vec<usize> = (0..dim_size).map(|sidx| dim_pos * (order_pos + 1) + sidx * (order_size + 1)).collect();
-        let z_in_idxs = pos_idxs.clone();
+        let mut z_in_idxs = pos_idxs.clone();
         z_in_idxs.append(&mut size_idxs);
 
         (pos_idxs, size_idxs, z_in_idxs, offset_idx)
@@ -118,13 +143,13 @@ impl Model {
             diag_components
         };
 
-        block_diag(*diag_components);
+        block_diag(diag_components);
     }
 }
 
 #[cfg(test)]
 mod test {
-    use nalgebra::dvector;
+    use nalgebra::{ dvector, Matrix3x4, Matrix };
     use super::*;
 
     #[test]
@@ -142,21 +167,41 @@ mod test {
     }
 
     #[test]
-    fn test_block_diag() {
-        let a = vec![vec![1., 1.], vec![0., 1.]];
-        let b = vec![vec![1., 1.], vec![0., 1.]];
-        let c = vec![vec![1.]];
-        let d = vec![vec![1.]];
+    fn test_m() {
+        let mut m = Matrix3x4::new(
+            11, 12, 13, 14,
+            21, 22, 23, 24,
+            31, 32, 33, 34
+        );
 
-        let expect = vec![
-            vec![1., 1., 0., 0., 0., 0.],
-            vec![0., 1., 0., 0., 0., 0.],
-            vec![0., 0., 1., 1., 0., 0.],
-            vec![0., 0., 0., 1., 0., 0.],
-            vec![0., 0., 0., 0., 1., 0.],
-            vec![0., 0., 0., 0., 0., 1.]
+        println!("{}", m);
+
+        let dm = DMatrix::from_row_slice(2, 3, &[
+            0, 1, 2,
+            3, 4, 5
+        ]);
+
+        println!("{}", dm);
+        assert!(dm[(0, 0)] == 0 && dm[(0, 1)] == 1 && dm[(0, 2)] == 2 &&
+        dm[(1, 0)] == 3 && dm[(1, 1)] == 4 && dm[(1, 2)] == 5);
+
+    }
+
+    #[test]
+    fn test_block_diag() {
+        let a = DMatrix::from_row_slice(2, 2, &[1., 0., 0., 1.]);
+        let b = DMatrix::from_row_slice(2, 3, &[3., 4., 5., 6., 7., 8.]);
+        let c = DMatrix::from_row_slice(1, 1, &[7.]);
+
+        let expect = dmatrix![
+            1., 0., 0., 0., 0., 0.,
+            0., 1., 0., 0., 0., 0.,
+            0., 0., 3., 4., 5., 0.,
+            0., 0., 6., 7., 8., 0.,
+            0., 0., 0., 0., 0., 7.
         ];
 
-        assert!(block_diag(a, b, c, d) == expect);
+        let out = block_diag(vec![a, b, c]);
+        println!("{}", out);
     }
 }

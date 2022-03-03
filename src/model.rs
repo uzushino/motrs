@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::cmp::max;
 use nalgebra::{dmatrix, DVector, DMatrix, Matrix2x1};
+use crate::Q_discrete_white_noise;
+
 
 struct ModelPreset {
     pub constant_velocity_and_static_box_size_2d: HashMap<String, usize>,
@@ -8,11 +10,11 @@ struct ModelPreset {
 }
 
 fn base_dim_block<'a>(dt: f64, order: usize) -> DMatrix<f64> {
-    let block = dmatrix![
+    let block = DMatrix::from_row_slice(3, 3, &[
         1., dt, (dt.powf(2.)) / 2.,
         0., 1., dt,
         0., 0., 1.
-    ];
+    ]);
 
     let cutoff = order + 1;
 
@@ -128,7 +130,7 @@ impl Model {
     }
 
 
-    pub fn build_F(&self) {
+    pub fn build_F(&self) -> DMatrix<f64> {
         let block_pos = base_dim_block(self.dt, self.order_pos);
         let block_size = base_dim_block(self.dt, self.order_size);
 
@@ -143,8 +145,21 @@ impl Model {
             diag_components
         };
 
-        block_diag(diag_components);
+        block_diag(diag_components)
     }
+
+    pub fn build_Q(&self) -> DMatrix<f64> {
+        let var_pos = self.q_var_pos;
+        let var_size = self.q_var_size;
+
+        let q_pos = if self.order_pos == 0 {
+            dmatrix![var_pos]
+        } else {
+            // dim=self.order_pos + 1, dt=self.dt, var=var_pos
+            Q_discrete_white_noise(self.order_pos + 1, self.dt, var_pos, 1, true)
+        };
+    }
+
 }
 
 #[cfg(test)]
@@ -167,41 +182,20 @@ mod test {
     }
 
     #[test]
-    fn test_m() {
-        let mut m = Matrix3x4::new(
-            11, 12, 13, 14,
-            21, 22, 23, 24,
-            31, 32, 33, 34
-        );
-
-        println!("{}", m);
-
-        let dm = DMatrix::from_row_slice(2, 3, &[
-            0, 1, 2,
-            3, 4, 5
-        ]);
-
-        println!("{}", dm);
-        assert!(dm[(0, 0)] == 0 && dm[(0, 1)] == 1 && dm[(0, 2)] == 2 &&
-        dm[(1, 0)] == 3 && dm[(1, 1)] == 4 && dm[(1, 2)] == 5);
-
-    }
-
-    #[test]
     fn test_block_diag() {
         let a = DMatrix::from_row_slice(2, 2, &[1., 0., 0., 1.]);
         let b = DMatrix::from_row_slice(2, 3, &[3., 4., 5., 6., 7., 8.]);
         let c = DMatrix::from_row_slice(1, 1, &[7.]);
 
-        let expect = dmatrix![
+        let expect = DMatrix::from_row_slice(5, 6, &[
             1., 0., 0., 0., 0., 0.,
             0., 1., 0., 0., 0., 0.,
             0., 0., 3., 4., 5., 0.,
             0., 0., 6., 7., 8., 0.,
             0., 0., 0., 0., 0., 7.
-        ];
-
+        ]);
         let out = block_diag(vec![a, b, c]);
-        println!("{}", out);
+
+        assert!(out == expect)
     }
 }

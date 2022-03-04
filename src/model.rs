@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::cmp::max;
-use nalgebra::{dmatrix, DVector, DMatrix, Matrix2x1};
+use nalgebra::{dmatrix, DVector, DMatrix, Matrix2x1, dvector};
 use crate::Q_discrete_white_noise;
 
 
@@ -158,6 +158,32 @@ impl Model {
             // dim=self.order_pos + 1, dt=self.dt, var=var_pos
             Q_discrete_white_noise(self.order_pos + 1, self.dt, var_pos, 1, true)
         };
+
+        let q_size= if self.order_size == 0 {
+            dmatrix![var_size]
+        } else {
+            // dim=self.order_pos + 1, dt=self.dt, var=var_pos
+            Q_discrete_white_noise(self.order_size + 1, self.dt, var_size, 1, true)
+        };
+
+        let diag_components = {
+            let _block_pos = repeat_vec(vec![q_pos], self.dim_pos);
+            let _block_size = repeat_vec(vec![q_size], self.dim_size);
+            let mut diag_components = Vec::new();
+
+            diag_components.extend(_block_pos);
+            diag_components.extend(_block_size);
+
+            diag_components
+        };
+
+        block_diag(diag_components)
+    }
+
+    pub fn build_H(&self) {
+        fn _base_block(order: usize) -> DVector<usize> {
+            return dvector![1] + dvector![0] * order;
+        }
     }
 
 }
@@ -166,6 +192,13 @@ impl Model {
 mod test {
     use nalgebra::{ dvector, Matrix3x4, Matrix };
     use super::*;
+
+    #[test]
+    fn test_vec() {
+        let mut a=  dvector![1];
+        a.append(&mut repeat_vec(vec![0], 3));
+        println!("{:?}", a);
+    }
 
     #[test]
     fn test_zero_pad() {

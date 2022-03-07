@@ -180,12 +180,28 @@ impl Model {
         block_diag(diag_components)
     }
 
-    pub fn build_H(&self) {
-        fn _base_block(order: usize) -> DVector<usize> {
-            return dvector![1] + dvector![0] * order;
-        }
-    }
+    pub fn build_H(&self) -> DMatrix<f64> {
+        fn _base_block(order: usize) -> DMatrix<f64> {
+            let mut diag_components = Vec::new();
 
+            let a = vec![1.];
+            let b = repeat_vec(vec![0.], order);
+
+            diag_components.extend(a);
+            diag_components.extend(b);
+
+            DMatrix::from_vec(1, order, diag_components)
+        }
+
+        let _block_pos = repeat_vec(vec![_base_block(self.order_pos)], self.dim_pos);
+        let _block_size = repeat_vec(vec![_base_block(self.order_size)], self.dim_size);
+        let mut diag_components = Vec::new();
+
+        diag_components.extend(_block_pos);
+        diag_components.extend(_block_size);
+
+        block_diag(diag_components)
+    }
 }
 
 #[cfg(test)]
@@ -195,7 +211,7 @@ mod test {
 
     #[test]
     fn test_vec() {
-        let mut a=  dvector![1];
+        let mut a =  dvector![1];
         a.append(&mut repeat_vec(vec![0], 3));
         println!("{:?}", a);
     }

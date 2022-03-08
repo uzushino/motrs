@@ -59,6 +59,10 @@ fn block_diag(arrs: Vec<DMatrix<f64>>) -> DMatrix<f64> {
     out
 }
 
+fn eye(block: usize) -> DMatrix<f64> {
+    DMatrix::identity(block, block)
+}
+
 pub struct Model {
     dt: f64,
     order_pos: usize,
@@ -202,19 +206,17 @@ impl Model {
 
         block_diag(diag_components)
     }
+
+    pub fn build_R(&self) -> DMatrix<f64> {
+        let n = eye(self.state_length);
+        n * self.p_cov_p0
+    }
 }
 
 #[cfg(test)]
 mod test {
     use nalgebra::{ dvector, Matrix3x4, Matrix };
     use super::*;
-
-    #[test]
-    fn test_vec() {
-        let mut a =  dvector![1];
-        a.append(&mut repeat_vec(vec![0], 3));
-        println!("{:?}", a);
-    }
 
     #[test]
     fn test_zero_pad() {
@@ -243,8 +245,22 @@ mod test {
             0., 0., 6., 7., 8., 0.,
             0., 0., 0., 0., 0., 7.
         ]);
+
         let out = block_diag(vec![a, b, c]);
 
         assert!(out == expect)
+    }
+
+    #[test]
+    fn test_eye() {
+        let a = eye(3);
+        let actual = a * 3.0;
+        let expect = DMatrix::from_row_slice(3, 3, &[
+            3., 0., 0.,
+            0., 3., 0.,
+            0., 0., 3.,
+        ]);
+
+        assert!(actual == expect)
     }
 }

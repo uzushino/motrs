@@ -207,7 +207,7 @@ impl Model {
         block_diag(diag_components)
     }
 
-    pub fn build_R(&self) -> DMatrix<f64> {
+    pub fn build_P(&self) -> DMatrix<f64> {
         let n = eye(self.state_length);
         n * self.p_cov_p0
     }

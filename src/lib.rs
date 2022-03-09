@@ -1,6 +1,7 @@
 use nalgebra::base::DMatrix;
 
 mod model;
+mod tracker;
 
 
 pub fn Q_discrete_white_noise(dim: usize, dt: f64, var: f64, block_size: usize, order_by_dim: bool) -> DMatrix<f64> {

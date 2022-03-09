@@ -211,6 +211,13 @@ impl Model {
         let n = eye(self.state_length);
         n * self.p_cov_p0
     }
+
+    pub fn build_R(self) -> DMatrix<f64> {
+        let block_pos = eye(self.dim_pos) * self.r_var_pos;
+        let block_size = eye(self.dim_size) * self.r_var_size;
+
+        block_diag(vec![block_pos, block_size])
+    }
 }
 
 #[cfg(test)]

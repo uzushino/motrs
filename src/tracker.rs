@@ -1,13 +1,12 @@
 use filter::kalman::kalman_filter::KalmanFilter;
-use nalgebra::base::Vector1;
-use nalgebra::{dmatrix, DVector, DMatrix, Matrix2x1, dvector, VectorN, MatrixMN, RealField, Dim};
+use nalgebra::allocator::Allocator;
 use nalgebra::base::dimension::DimName;
+use nalgebra::{DefaultAllocator, DVector, MatrixMN, RealField, VectorN};
 
 use crate::model::Model;
 
-fn get_kalman_object_tracker<F, DimX, DimZ, DimU>(model: &Model, x0: Option<DVector<f64>>) -> KalmanFilter<f32, U1, U1, U1>
+fn get_kalman_object_tracker<F, DimX, DimZ, DimU>(model: &Model, x0: Option<DVector<f64>>) -> KalmanFilter<f64, DimX, DimZ, DimU>
     where
-        F: RealField,
         DimX: DimName,
         DimZ: DimName,
         DimU: DimName,

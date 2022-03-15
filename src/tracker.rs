@@ -1,11 +1,11 @@
-use filter::kalman::kalman_filter::KalmanFilter;
 use nalgebra::{DefaultAllocator, DVector, MatrixMN, RealField, VectorN};
 
+use crate::filter::KalmanFilter;
 use crate::model::Model;
 
-fn get_kalman_object_tracker<F, DimX, DimZ, DimU>(model: &Model, x0: Option<DVector<f64>>) -> KalmanFilter<f64, DimX, DimZ, DimU>
+fn get_kalman_object_tracker<F, DimX, DimZ, DimU>(model: &Model, x0: Option<DVector<f64>>) -> KalmanFilter<f64>
 {
-    let mut tracker = KalmanFilter::<f64, DimX, DimZ, DimU>::default();
+    let mut tracker = KalmanFilter::<f64>::default();
 
     tracker.F = model.build_F();
     tracker.Q = model.build_Q();

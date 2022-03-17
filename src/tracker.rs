@@ -5,7 +5,7 @@ use crate::model::Model;
 
 fn get_kalman_object_tracker<F, DimX, DimZ, DimU>(model: &Model, x0: Option<DVector<f64>>) -> KalmanFilter<f64>
 {
-    let mut tracker = KalmanFilter::<f64>::default();
+    let mut tracker = KalmanFilter::<f64>::new(1, 1, 1);
 
     tracker.F = model.build_F();
     tracker.Q = model.build_Q();

@@ -212,7 +212,7 @@ impl Model {
         n * self.p_cov_p0
     }
 
-    pub fn build_R(self) -> DMatrix<f64> {
+    pub fn build_R(&self) -> DMatrix<f64> {
         let block_pos = eye(self.dim_pos) * self.r_var_pos;
         let block_size = eye(self.dim_size) * self.r_var_size;
 

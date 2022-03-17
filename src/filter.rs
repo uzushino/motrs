@@ -1,12 +1,16 @@
 /**
  * Refer: https://github.com/MichaelMauderer/filter-rs
  */
-use nalgebra::{dmatrix, DVector, DMatrix, Matrix2x1, dvector, RealField};
+use nalgebra::{DVector, DMatrix, RealField};
 
 #[allow(non_snake_case)]
 #[derive(Debug)]
 pub struct KalmanFilter<F: RealField>
 {
+    pub dim_x: usize,
+    pub dim_z: usize,
+    pub dim_u: usize,
+
     pub x: DVector<F>,
     pub P: DMatrix<F>,
     pub x_prior: DVector<F>,
@@ -22,14 +26,59 @@ pub struct KalmanFilter<F: RealField>
     pub y: DVector<F>,
     pub K: DMatrix<F>,
     pub S: DMatrix<F>,
-    /// Inverse system uncertainty.
     pub SI: DMatrix<F>,
-    /// Fading memory setting.
     pub alpha_sq: F,
 }
 
 #[allow(non_snake_case)]
-impl<F> KalmanFilter<F> where F: RealField {
+impl<F> KalmanFilter<F> where F: RealField + Copy {
+    pub fn new(dim_x: usize, dim_z: usize, dim_u: usize) -> Self {
+        let x = DVector::<F>::from_element(dim_x, F::zero());
+        let P = DMatrix::<F>::identity(dim_x, dim_x);
+        let Q = DMatrix::<F>::identity(dim_x, dim_x);
+        let F = DMatrix::<F>::identity(dim_x, dim_x);
+        let H = DMatrix::<F>::from_element(dim_z, dim_x, F::zero());
+        let R = DMatrix::<F>::identity(dim_z, dim_z);
+        let alpha_sq = F::one();
+
+        let z = None;
+
+        let K = DMatrix::<F>::from_element(dim_x, dim_z, F::zero());
+        let y = DVector::<F>::from_element(dim_z, F::one());
+        let S = DMatrix::<F>::from_element(dim_z, dim_z, F::zero());
+        let SI = DMatrix::<F>::from_element(dim_z, dim_z, F::zero());
+
+        let x_prior = x.clone();
+        let P_prior = P.clone();
+
+        let x_post = x.clone();
+        let P_post = P.clone();
+
+        KalmanFilter {
+            dim_x,
+            dim_u,
+            dim_z,
+
+            x,
+            P,
+            x_prior,
+            P_prior,
+            x_post,
+            P_post,
+            z,
+            R,
+            Q,
+            B: None,
+            F,
+            H,
+            y,
+            K,
+            S,
+            SI,
+            alpha_sq,
+        }
+    }
+
     pub fn predict(&mut self,
         u: Option<&DVector<F>>,
         B: Option<&DMatrix<F>>, F: Option<&DMatrix<F>>,
@@ -67,7 +116,7 @@ impl<F> KalmanFilter<F> where F: RealField {
 
         self.x = &self.x + &self.K * &self.y;
 
-        let I_KH = DMatrix::identity() - &self.K * H;
+        let I_KH = DMatrix::identity(self.dim_x, self.dim_x) - &self.K * H;
         self.P =
             ((I_KH.clone() * &self.P) * I_KH.transpose()) + ((&self.K * R) * &self.K.transpose());
 
@@ -140,7 +189,7 @@ impl<F> KalmanFilter<F> where F: RealField {
 
         let x = x + K * y;
 
-        let I_KH = &(DMatrix::<F>::identity() - (K * H));
+        let I_KH = &(DMatrix::<F>::identity(self.dim_x, self.dim_x) - (K * H));
 
         let P = ((I_KH * P) * I_KH.transpose()) + ((K * R) * &K.transpose());
 
@@ -158,98 +207,50 @@ impl<F> KalmanFilter<F> where F: RealField {
     }
 }
 
-#[allow(non_snake_case)]
-impl<F> Default for KalmanFilter<F> where F: RealField {
-    /// Returns a Kalman filter initialised with default parameters.
-    fn default() -> Self {
-        let x = DVector::<F>::from_element(F::one());
-        let P = DMatrix::<F>::identity();
-        let Q = DMatrix::<F>::identity();
-        let F = DMatrix::<F>::identity();
-        let H = DMatrix::<F>::from_element(F::zero());
-        let R = DMatrix::<F>::identity();
-        let alpha_sq = F::one();
-
-        let z = None;
-
-        let K = DMatrix::<F>::from_element(F::zero());
-        let y = DVector::<F>::from_element(F::one());
-        let S = DMatrix::<F>::from_element(F::zero());
-        let SI = DMatrix::<F>::from_element(F::zero());
-
-        let x_prior = x.clone();
-        let P_prior = P.clone();
-
-        let x_post = x.clone();
-        let P_post = P.clone();
-
-        KalmanFilter {
-            x,
-            P,
-            x_prior,
-            P_prior,
-            x_post,
-            P_post,
-            z,
-            R,
-            Q,
-            B: None,
-            F,
-            H,
-            y,
-            K,
-            S,
-            SI,
-            alpha_sq,
-        }
-    }
-}
-
-/*
 #[cfg(test)]
 mod tests {
     use assert_approx_eq::assert_approx_eq;
     use nalgebra::base::Vector1;
-    use nalgebra::{U1, U2, Vector2, Matrix2, Matrix1};
+    use nalgebra::{U1, U2, Vector2, Matrix2, Matrix1, dvector};
 
     use super::*;
 
     #[test]
     fn test_univariate_kf_setup() {
-        let mut kf: KalmanFilter<f32, U1, U1, U1> = KalmanFilter::<f32, U1, U1, U1>::default();
+        let mut kf: KalmanFilter<f32> = KalmanFilter::<f32>::new(1, 1, 1);
 
         for i in 0..1000 {
             let zf = i as f32;
-            let z = Vector1::new(zf);
+            let z = dvector!(zf);
+
             kf.predict(None, None, None, None);
             kf.update(&z, None, None);
+
             assert_approx_eq!(zf, kf.z.clone().unwrap()[0]);
         }
     }
 
     #[test]
     fn test_1d_reference() {
-        let mut kf: KalmanFilter<f64, U2, U1, U1> = KalmanFilter::default();
+        let mut kf: KalmanFilter<f64> = KalmanFilter::new(2, 1, 1);
 
-        kf.x = Vector2::new(2.0, 0.0);
-        kf.F = Matrix2::new(
-            1.0, 1.0,
-            0.0, 1.0,
-        );
-        kf.H = Vector2::new(1.0, 0.0).transpose();
+        kf.x = dvector!(2.0, 0.0);
+
+        kf.F = DMatrix::from_row_slice(2, 2, &[1.0, 1.0, 0.0, 1.0 ]);
+        kf.H = DMatrix::from_row_slice(2, 1, &[1.0, 0.0]).transpose();
         kf.P *= 1000.0;
-        kf.R = Matrix1::new(5.0);
-        kf.Q = Matrix2::repeat(0.0001);
+        kf.R = DMatrix::from_row_slice(1, 1, &[5.0]).transpose();
+        kf.Q = DMatrix::from_row_slice(2, 1, &[0.0001, 0.001]).transpose();
 
         for t in 0..100 {
-            let z = Vector1::new(t as f64);
+            let z = dvector!(t as f64);
+
             kf.update(&z, None, None);
             kf.predict(None, None, None, None);
-            // This matches the results from an equivalent filterpy filter.
+
             assert_approx_eq!(kf.x[0],
                               if t == 0 { 0.0099502487 } else { t as f64 + 1.0 },
                               0.05);
         }
     }
 }
- */

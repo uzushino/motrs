@@ -240,7 +240,7 @@ mod tests {
         kf.H = DMatrix::from_row_slice(2, 1, &[1.0, 0.0]).transpose();
         kf.P *= 1000.0;
         kf.R = DMatrix::from_row_slice(1, 1, &[5.0]).transpose();
-        kf.Q = DMatrix::from_row_slice(2, 1, &[0.0001, 0.001]).transpose();
+        kf.Q = DMatrix::from_row_slice(2, 2, &[0.0001, 0.001, 0.0001, 0.001]).transpose();
 
         for t in 0..100 {
             let z = dvector!(t as f64);

@@ -40,7 +40,7 @@ struct SingleObjectTracker {
     score: Option<f64>,
     feature: Option<DVector<f64>>,
 
-    class_id_counts: HashMap<String, i64>,
+    class_id_counts: HashMap<i64, i64>,
     class_id: Option<i64>,
 }
 
@@ -77,12 +77,24 @@ impl SingleObjectTracker {
             update_feature_fn: exponential_moving_average_fn(smooth_feature_gamma),
         };
 
-        tracker.update_class_id(class_id0);
+        let class_id = tracker.update_class_id(class_id0);
+        tracker.class_id = class_id;
 
         tracker
     }
 
     fn update_class_id(&mut self, class_id: Option<i64>) -> Option<i64> {
-        None
+        if class_id.is_none() {
+            return None;
+        }
+
+        let class_id = class_id.unwrap();
+        let entry = self.class_id_counts.entry(class_id).or_insert(1);
+        *entry += 1;
+
+        self.class_id_counts
+            .iter()
+            .max_by_key(|entry | entry.1)
+            .map(|i| *i.0)
     }
 }

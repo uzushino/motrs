@@ -51,7 +51,9 @@ fn block_diag(arrs: Vec<DMatrix<f64>>) -> DMatrix<f64> {
     for (i, sh) in shapes.iter().enumerate() {
         let rr = sh[0];
         let cc = sh[1];
+
         out.index_mut((r..(r+rr), c..(c+cc))).copy_from(&arrs[i]);
+
         r += rr;
         c += cc;
     }

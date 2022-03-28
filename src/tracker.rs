@@ -44,6 +44,14 @@ struct SingleObjectTracker {
     class_id: Option<i64>,
 }
 
+type TrackBox = DVector<f64>;
+
+trait Tracker {
+    fn _box(self) -> TrackBox;
+    fn is_invalid(self) -> bool;
+    fn _predict(self);
+}
+
 impl SingleObjectTracker {
     pub fn new(
         max_staleness: f64,
@@ -89,6 +97,7 @@ impl SingleObjectTracker {
         }
 
         let class_id = class_id.unwrap();
+
         let entry = self.class_id_counts.entry(class_id).or_insert(1);
         *entry += 1;
 
@@ -96,5 +105,19 @@ impl SingleObjectTracker {
             .iter()
             .max_by_key(|entry | entry.1)
             .map(|i| *i.0)
+    }
+}
+
+impl Tracker for SingleObjectTracker {
+    fn _box(self) -> TrackBox {
+        todo!()
+    }
+
+    fn is_invalid(self) -> bool {
+        todo!();
+    }
+
+    fn _predict(self) {
+        todo!();
     }
 }

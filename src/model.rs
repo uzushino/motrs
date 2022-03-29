@@ -1,12 +1,41 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::Hash};
 use std::cmp::max;
 use nalgebra::{dmatrix, DVector, DMatrix, Matrix2x1, dvector};
 use crate::Q_discrete_white_noise;
-
+use nalgebra::Dynamic;
 
 struct ModelPreset {
-    pub constant_velocity_and_static_box_size_2d: HashMap<String, usize>,
-    pub constant_acceleration_and_static_box_size_2d: HashMap<String, usize>,
+}
+
+impl ModelPreset {
+    pub fn new() -> Self {
+        ModelPreset {}
+    }
+
+    pub fn constant_velocity_and_static_box_size_2d() -> HashMap<String, usize> {
+        let key = vec![
+            String::from("order_pos"),
+            String::from("dim_pos"),
+            String::from("order_size"),
+            String::from("dim_size"),
+        ];
+        let value = vec![1, 2, 0, 2];
+
+        key.into_iter().zip(value.into_iter()).collect::<HashMap<_, _> >()
+    }
+
+    pub fn constant_acceleration_and_static_box_size_2d() -> HashMap<String, usize> {
+        let key = vec![
+            String::from("order_pos"),
+            String::from("dim_pos"),
+            String::from("order_size"),
+            String::from("dim_size"),
+        ];
+
+        let value = vec![2, 2, 0, 2];
+
+        key.into_iter().zip(value.into_iter()).collect::<HashMap<_, _> >()
+    }
 }
 
 fn base_dim_block<'a>(dt: f64, order: usize) -> DMatrix<f64> {
@@ -88,16 +117,31 @@ pub struct Model {
 impl Model {
     pub fn new(
         dt: f64,
-        order_pos: usize,
-        dim_pos: usize,
-        order_size: usize,
-        dim_size: usize,
-        q_var_pos: f64,
-        q_var_size: f64,
-        r_var_pos: f64,
-        r_var_size: f64,
-        p_cov_p0: f64
+        kwargs: HashMap<String, f64>,
     ) -> Self {
+        let default_kwargs = HashMap::from([
+            (String::from("order_pos"), 1.),
+            (String::from("dim_pos"), 2.),
+            (String::from("order_size"), 0.),
+            (String::from("dim_size"), 2.),
+            (String::from("q_var_pos"), 70.),
+            (String::from("q_var_size"), 10.),
+            (String::from("r_var_pos"), 1.),
+            (String::from("r_var_size"), 1.),
+            (String::from("p_cov_p0"), 1000.),
+        ]);
+
+        let kwargs = kwargs.into_iter().chain(default_kwargs).collect::<HashMap<_, _>>();
+        let order_pos: usize = kwargs["order_pos"] as usize;
+        let dim_pos: usize = kwargs["dim_pos"] as usize;
+        let order_size: usize = kwargs["order_size"] as usize;
+        let dim_size: usize = kwargs["dim_size"] as usize;
+        let q_var_pos: f64 = kwargs["q_var_pos"];
+        let q_var_size: f64 = kwargs["q_var_size"];
+        let r_var_pos: f64 = kwargs["r_var_pos"];
+        let r_var_size: f64 = kwargs["r_var_size"];
+        let p_cov_p0: f64 = kwargs["p_cov_p0"] ;
+
         let dim_box = 2 * max(dim_pos, dim_size);
         let (pos_idxs, size_idxs, z_in_x_ids, offset_idx) =
             Self::_calc_idxs(dim_pos, dim_size, order_pos, order_size);
@@ -220,6 +264,48 @@ impl Model {
 
         block_diag(vec![block_pos, block_size])
     }
+
+    /*
+       def box_to_z(self, box: Box) -> Vector:
+        assert self.dim_box == len(box)
+        box = np.array(box).reshape(2, (int(self.dim_box / 2)))
+        center = (np.sum(box, axis=0) / 2.0)[:self.dim_pos]
+        length = (box[1, :] - box[0, :])[:self.dim_size]
+        return np.concatenate((center, length))
+
+    def box_to_x(self, box: Box) -> Vector:
+        x = np.zeros((self.state_length,))
+        x[self.z_in_x_idxs] = self.box_to_z(box)
+        return x
+    */
+    pub fn box_to_z(&self, _box: DMatrix<f64>) -> DVector<f64> {
+        let _box = DMatrix::from_data(_box).reshape_generic(
+            Dynamic::new(self.dim_box / 2),
+            Dynamic::new(2),
+        );
+
+        let tmp: Vec<f64> = _box.row(0).iter().map(|x| x.clone()).collect::<Vec<_>>().clone();
+        dbg!(&tmp);
+        dbg!(&self.dim_pos);
+
+        let a = _box.row_sum() / 2.0;
+        dbg!(&a);
+
+        let center = a.index((..self.dim_pos, ..));
+
+        let b = _box.index((1, ..)) - _box.index((0, ..));
+        let length = b.index((..self.dim_size, ..));
+
+        let mut result = center.row(0).as_slice().to_vec();
+        result.append(&mut length.row(0).as_slice().to_vec());
+
+        DVector::from(result)
+    }
+
+    /*
+    pub fn box_to_x(&self, _box: DVector<f64>) -> DVector<f64> {
+        let mut x = DVector::zeros(self.state_length);
+    } */
 }
 
 #[cfg(test)]
@@ -271,5 +357,15 @@ mod test {
         ]);
 
         assert!(actual == expect)
+    }
+
+    #[test]
+    fn test_box_to_z() {
+        let model = Model::new(1.0, HashMap::default());
+        let _box = DMatrix::from_column_slice(1, 4, &[1f64, 2., 3., 4.]);
+
+        let result = model.box_to_z(_box);
+
+        dbg!(&result);
     }
 }

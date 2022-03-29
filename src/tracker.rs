@@ -1,10 +1,11 @@
 use std::collections::HashMap;
+use std::hash::Hash;
 use nalgebra::{DVector};
 
 use crate::filter::KalmanFilter;
 use crate::model::Model;
 
-fn get_kalman_object_tracker<F, DimX, DimZ, DimU>(model: &Model, x0: Option<DVector<f64>>) -> KalmanFilter<f64>
+fn get_kalman_object_tracker<F>(model: &Model, x0: Option<DVector<f64>>) -> KalmanFilter<f64>
 {
     let mut tracker = KalmanFilter::<f64>::new(1, 1, 1);
 
@@ -119,5 +120,97 @@ impl Tracker for SingleObjectTracker {
 
     fn _predict(self) {
         todo!();
+    }
+}
+
+struct KalmanTracker {
+    id: String,
+    steps_alive: i64,
+    steps_positive: i64,
+    staleness: f64,
+    max_staleness: f64,
+
+    update_score_fn: Box<dyn Fn(DVector<f64>, DVector<f64>) -> DVector<f64>>,
+    update_feature_fn: Box<dyn Fn(DVector<f64>, DVector<f64>) -> DVector<f64>>,
+
+    score: Option<f64>,
+    feature: Option<DVector<f64>>,
+
+    class_id_counts: HashMap<i64, i64>,
+    class_id: Option<i64>,
+
+    model_kwargs: HashMap<String, String>,
+    model: Model,
+
+    _tracker: Option<KalmanFilter<f64>>,
+}
+
+impl KalmanTracker {
+    pub fn new(
+        model_kwargs: HashMap<String, String>,
+        x0: Option<DVector<f64>>,
+        box0: Option<TrackBox>,
+
+        max_staleness: f64,
+        smooth_score_gamma: f64,
+        smooth_feature_gamma: f64,
+        score0: Option<f64>,
+        class_id0: Option<i64>,
+
+        dt: f64,
+        kwargs: HashMap<String, f64>,
+    ) -> Self {
+        let id = uuid::Uuid::new_v4().to_hyphenated().to_string();
+        let steps_alive = 1;
+        let steps_positive= 1;
+        let staleness = 0.0;
+        let max_staleness = max_staleness;
+
+        let score = score0;
+        let feature = None;
+        let class_id_counts = HashMap::new();
+        let class_id = None;
+
+        let mut tracker = Self {
+            id,
+            steps_alive,
+            steps_positive,
+            staleness,
+            max_staleness,
+            score,
+            feature,
+            class_id,
+            class_id_counts,
+            update_score_fn: exponential_moving_average_fn(smooth_score_gamma),
+            update_feature_fn: exponential_moving_average_fn(smooth_feature_gamma),
+            model_kwargs,
+            model: Model::new(dt, kwargs),
+            _tracker: None,
+        };
+
+        /*
+        let x0 = x0.unwrap_or(tracker.model.box_to_x(box0));
+        tracker._tracker = Some(get_kalman_object_tracker::<f64>(&tracker.model, x0));
+
+        let class_id = tracker.update_class_id(class_id0);
+        tracker.class_id = class_id;
+ */
+        tracker
+    }
+
+    fn update_class_id(&mut self, class_id: Option<i64>) -> Option<i64> {
+        if class_id.is_none() {
+            return None;
+        }
+
+        let class_id = class_id.unwrap();
+
+        let entry = self.class_id_counts.entry(class_id).or_insert(1);
+        *entry += 1;
+
+        self.class_id_counts
+            .iter()
+            .max_by_key(|entry | entry.1)
+            .map(|i| *i.0)
     }
 }

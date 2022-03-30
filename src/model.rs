@@ -131,7 +131,7 @@ impl Model {
             (String::from("p_cov_p0"), 1000.),
         ]);
 
-        let kwargs = kwargs.into_iter().chain(default_kwargs).collect::<HashMap<_, _>>();
+        let kwargs = default_kwargs.into_iter().chain(kwargs).collect::<HashMap<_, _>>();
         let order_pos: usize = kwargs["order_pos"] as usize;
         let dim_pos: usize = kwargs["dim_pos"] as usize;
         let order_size: usize = kwargs["order_size"] as usize;
@@ -141,6 +141,8 @@ impl Model {
         let r_var_pos: f64 = kwargs["r_var_pos"];
         let r_var_size: f64 = kwargs["r_var_size"];
         let p_cov_p0: f64 = kwargs["p_cov_p0"] ;
+
+        dbg!(&kwargs);
 
         let dim_box = 2 * max(dim_pos, dim_size);
         let (pos_idxs, size_idxs, z_in_x_ids, offset_idx) =
@@ -265,53 +267,26 @@ impl Model {
         block_diag(vec![block_pos, block_size])
     }
 
-    /*
-       def box_to_z(self, box: Box) -> Vector:
-        assert self.dim_box == len(box)
-        box = np.array(box).reshape(2, (int(self.dim_box / 2)))
-        center = (np.sum(box, axis=0) / 2.0)[:self.dim_pos]
-        length = (box[1, :] - box[0, :])[:self.dim_size]
-        return np.concatenate((center, length))
-
-    def box_to_x(self, box: Box) -> Vector:
-        x = np.zeros((self.state_length,))
-        x[self.z_in_x_idxs] = self.box_to_z(box)
-        return x
-    */
     pub fn box_to_z(&self, _box: DMatrix<f64>) -> DVector<f64> {
-        let _box = DMatrix::from_data(_box).reshape_generic(
-            Dynamic::new(self.dim_box / 2),
-            Dynamic::new(2),
-        );
-
-        let tmp: Vec<f64> = _box.row(0).iter().map(|x| x.clone()).collect::<Vec<_>>().clone();
-        dbg!(&tmp);
-        dbg!(&self.dim_pos);
-
+        let rep = _box.iter().map(|v| *v).collect::<Vec<f64>>();
+        let _box = DMatrix::from_row_slice(2, self.dim_box / 2, rep.as_slice());
         let a = _box.row_sum() / 2.0;
-        dbg!(&a);
-
-        let center = a.index((..self.dim_pos, ..));
-
+        let center = a.columns(0, self.dim_pos);
         let b = _box.index((1, ..)) - _box.index((0, ..));
-        let length = b.index((..self.dim_size, ..));
+        let length = b.columns(0, self.dim_size);
 
-        let mut result = center.row(0).as_slice().to_vec();
-        result.append(&mut length.row(0).as_slice().to_vec());
+        let mut result = center.iter().map(|v| *v).collect::<Vec<f64>>();
+        result.append(&mut length.iter().map(|v| *v).collect::<Vec<f64>>());
 
         DVector::from(result)
     }
-
-    /*
-    pub fn box_to_x(&self, _box: DVector<f64>) -> DVector<f64> {
-        let mut x = DVector::zeros(self.state_length);
-    } */
 }
 
 #[cfg(test)]
 mod test {
     use nalgebra::{ dvector, Matrix3x4, Matrix };
     use super::*;
+    use assert_approx_eq::assert_approx_eq;
 
     #[test]
     fn test_zero_pad() {
@@ -361,11 +336,30 @@ mod test {
 
     #[test]
     fn test_box_to_z() {
-        let model = Model::new(1.0, HashMap::default());
-        let _box = DMatrix::from_column_slice(1, 4, &[1f64, 2., 3., 4.]);
+        let mut kwargs = HashMap::default();
 
+        kwargs.insert(String::from("order_pos"), 1.);
+        kwargs.insert(String::from("dim_pos"), 2.);
+        kwargs.insert(String::from("order_size"), 0.);
+        kwargs.insert(String::from("dim_size"), 2.);
+
+        let model = Model::new(0.1, kwargs);
+        let _box = DMatrix::from_row_slice(1, 4, &[10f64, 10., 20., 20.]);
         let result = model.box_to_z(_box);
 
-        dbg!(&result);
+        assert!(result == dvector![15., 15., 10., 10.]);
+
+        let mut kwargs = HashMap::default();
+
+        kwargs.insert(String::from("order_pos"), 1.);
+        kwargs.insert(String::from("dim_pos"), 3.);
+        kwargs.insert(String::from("order_size"), 1.);
+        kwargs.insert(String::from("dim_size"), 2.);
+
+        let model = Model::new(0.1, kwargs);
+        let _box = DMatrix::from_row_slice(1, 6, &[10f64, 10., 0., 20., 20., 50.]);
+        let result = model.box_to_z(_box);
+
+        assert!(result == dvector![15., 15., 25., 10., 10.]);
     }
 }

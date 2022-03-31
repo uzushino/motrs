@@ -142,8 +142,6 @@ impl Model {
         let r_var_size: f64 = kwargs["r_var_size"];
         let p_cov_p0: f64 = kwargs["p_cov_p0"] ;
 
-        dbg!(&kwargs);
-
         let dim_box = 2 * max(dim_pos, dim_size);
         let (pos_idxs, size_idxs, z_in_x_ids, offset_idx) =
             Self::_calc_idxs(dim_pos, dim_size, order_pos, order_size);
@@ -280,11 +278,19 @@ impl Model {
 
         DVector::from(result)
     }
+
+    pub fn box_to_x(&self, _box: DMatrix<f64>) -> DMatrix<f64> {
+        let mut x: DMatrix<f64> = DMatrix::zeros(1, self.state_length);
+        let z = self.box_to_z(_box);
+        for (idx, i) in self.z_in_x_ids.iter().enumerate() {
+            x[*i] = z[idx];
+        }
+        x
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use nalgebra::{ dvector, Matrix3x4, Matrix };
     use super::*;
     use assert_approx_eq::assert_approx_eq;
 
@@ -332,6 +338,41 @@ mod test {
         ]);
 
         assert!(actual == expect)
+    }
+
+    #[test]
+    fn test_state_to_observation_converters() {
+        let mut kwargs = HashMap::default();
+
+        kwargs.insert(String::from("order_pos"), 1.);
+        kwargs.insert(String::from("dim_pos"), 2.);
+        kwargs.insert(String::from("order_size"), 0.);
+        kwargs.insert(String::from("dim_size"), 2.);
+
+        let model = Model::new(0.1, kwargs);
+        let _box = DMatrix::from_row_slice(1, 4, &[10., 10., 20., 30.]);
+        let x = model.box_to_x(_box);
+        assert!(DMatrix::from_row_slice(1, 6, &[15., 0., 20., 0., 10., 20.]) == x);
+
+        let box_ret = model.x_to_box(x);
+        assert!(box_ret == _box);
+
+
+        let mut kwargs = HashMap::default();
+
+        kwargs.insert(String::from("order_pos"), 1.);
+        kwargs.insert(String::from("dim_pos"), 3.);
+        kwargs.insert(String::from("order_size"), 0.);
+        kwargs.insert(String::from("dim_size"), 3.);
+
+        let model = Model::new(0.1, kwargs);
+        let _box = DMatrix::from_row_slice(1, 6, &[10., 10., 10., 20., 30., 40.]);
+        let x = model.box_to_x(_box);
+
+        assert!(DMatrix::from_row_slice(1, 9, &[15., 0., 20., 0., 25., 0., 10., 20., 30.]) == x);
+
+        let box_ret = model.x_to_box(x);
+        assert!(box_ret == _box);
     }
 
     #[test]

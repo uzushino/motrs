@@ -188,13 +188,12 @@ impl KalmanTracker {
             _tracker: None,
         };
 
-        /*
-        let x0 = x0.unwrap_or(tracker.model.box_to_x(box0));
-        tracker._tracker = Some(get_kalman_object_tracker::<f64>(&tracker.model, x0));
+        // let x0 = x0.unwrap_or(tracker.model.box_to_x(box0.unwrap()));
+        // tracker._tracker = Some(get_kalman_object_tracker::<f64>(&tracker.model, x0));
 
         let class_id = tracker.update_class_id(class_id0);
         tracker.class_id = class_id;
- */
+
         tracker
     }
 

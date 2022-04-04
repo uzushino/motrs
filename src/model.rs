@@ -1,6 +1,6 @@
 use std::{collections::HashMap, hash::Hash};
 use std::cmp::max;
-use nalgebra::{dmatrix, DVector, DMatrix, Matrix2x1, dvector};
+use nalgebra::{dmatrix, DVector, DMatrix, Matrix2x1};
 use crate::Q_discrete_white_noise;
 use nalgebra::Dynamic;
 
@@ -50,9 +50,9 @@ fn base_dim_block<'a>(dt: f64, order: usize) -> DMatrix<f64> {
     DMatrix::from(block.index((0..cutoff, 0..cutoff)))
 }
 
-fn zero_pad(arr: DVector<f64>, length: usize) -> DVector<f64> {
-    let mut ret = DVector::zeros(length);
-    ret.index_mut((..arr.shape().0, ..)).copy_from(&arr);
+fn zero_pad(arr: DMatrix<f64>, length: usize) -> DMatrix<f64> {
+    let mut ret = DMatrix::zeros(1, length);
+    ret.index_mut((.., ..arr.shape().1)).copy_from(&arr);
     ret
 }
 
@@ -265,7 +265,7 @@ impl Model {
         block_diag(vec![block_pos, block_size])
     }
 
-    pub fn box_to_z(&self, _box: DMatrix<f64>) -> DVector<f64> {
+    pub fn box_to_z(&self, _box: DMatrix<f64>) -> DMatrix<f64> {
         let rep = _box.iter().map(|v| *v).collect::<Vec<f64>>();
         let _box = DMatrix::from_row_slice(2, self.dim_box / 2, rep.as_slice());
         let a = _box.row_sum() / 2.0;
@@ -276,7 +276,7 @@ impl Model {
         let mut result = center.iter().map(|v| *v).collect::<Vec<f64>>();
         result.append(&mut length.iter().map(|v| *v).collect::<Vec<f64>>());
 
-        DVector::from(result)
+        DMatrix::from_row_slice(1, result.len(), result.as_slice())
     }
 
     pub fn box_to_x(&self, _box: DMatrix<f64>) -> DMatrix<f64> {
@@ -287,6 +287,33 @@ impl Model {
         }
         x
     }
+
+    pub fn x_to_box(&self, x: DMatrix<f64>) -> DMatrix<f64> {
+        let size = max(self.dim_pos, self.dim_size);
+
+        let mut xs = Vec::default();
+        for i in &self.pos_idxs {
+            xs.push(x[*i]);
+        }
+        let center = zero_pad(
+            DMatrix::from_row_slice(1, xs.len(), xs.as_slice()),
+            size
+        );
+
+        let mut ys = Vec::default();
+        for i in &self.size_idxs {
+            ys.push(x[*i]);
+        }
+        let length = zero_pad(
+            DMatrix::from_row_slice(1, ys.len(), ys.as_slice()),
+            size
+        );
+
+        let mut result = (center.clone() - length.clone() / 2.).iter().map(|v| *v).collect::<Vec<f64>>();
+        result.append(&mut (center + length / 2.).iter().map(|v| *v).collect::<Vec<f64>>());
+
+        DMatrix::from_row_slice(1, result.len(), result.as_slice())
+    }
 }
 
 #[cfg(test)]
@@ -296,10 +323,10 @@ mod test {
 
     #[test]
     fn test_zero_pad() {
-        let arr = dvector![1., 2., 3.];
+        let arr = dmatrix![1., 2., 3.];
         let pad_arr = zero_pad(arr, 5);
 
-        assert!(pad_arr == dvector![1., 2., 3., 0., 0.])
+        assert!(pad_arr == dmatrix![1., 2., 3., 0., 0.])
     }
 
     #[test]
@@ -350,13 +377,15 @@ mod test {
         kwargs.insert(String::from("dim_size"), 2.);
 
         let model = Model::new(0.1, kwargs);
-        let _box = DMatrix::from_row_slice(1, 4, &[10., 10., 20., 30.]);
-        let x = model.box_to_x(_box);
-        assert!(DMatrix::from_row_slice(1, 6, &[15., 0., 20., 0., 10., 20.]) == x);
+        let _box = dmatrix![10., 10., 20., 30.];
+        let x = model.box_to_x(_box.clone());
+        assert!(dmatrix![15., 0., 20., 0., 10., 20.] == x);
 
         let box_ret = model.x_to_box(x);
-        assert!(box_ret == _box);
 
+        println!("{} {}", box_ret, _box);
+
+        assert!(box_ret == _box);
 
         let mut kwargs = HashMap::default();
 
@@ -366,10 +395,10 @@ mod test {
         kwargs.insert(String::from("dim_size"), 3.);
 
         let model = Model::new(0.1, kwargs);
-        let _box = DMatrix::from_row_slice(1, 6, &[10., 10., 10., 20., 30., 40.]);
-        let x = model.box_to_x(_box);
+        let _box = dmatrix![10., 10., 10., 20., 30., 40.];
+        let x = model.box_to_x(_box.clone());
 
-        assert!(DMatrix::from_row_slice(1, 9, &[15., 0., 20., 0., 25., 0., 10., 20., 30.]) == x);
+        assert!(dmatrix![15., 0., 20., 0., 25., 0., 10., 20., 30.] == x);
 
         let box_ret = model.x_to_box(x);
         assert!(box_ret == _box);
@@ -385,10 +414,10 @@ mod test {
         kwargs.insert(String::from("dim_size"), 2.);
 
         let model = Model::new(0.1, kwargs);
-        let _box = DMatrix::from_row_slice(1, 4, &[10f64, 10., 20., 20.]);
+        let _box = dmatrix![10f64, 10., 20., 20.];
         let result = model.box_to_z(_box);
 
-        assert!(result == dvector![15., 15., 10., 10.]);
+        assert!(result == dmatrix![15., 15., 10., 10.]);
 
         let mut kwargs = HashMap::default();
 
@@ -398,9 +427,9 @@ mod test {
         kwargs.insert(String::from("dim_size"), 2.);
 
         let model = Model::new(0.1, kwargs);
-        let _box = DMatrix::from_row_slice(1, 6, &[10f64, 10., 0., 20., 20., 50.]);
+        let _box = dmatrix![10f64, 10., 0., 20., 20., 50.];
         let result = model.box_to_z(_box);
 
-        assert!(result == dvector![15., 15., 25., 10., 10.]);
+        assert!(result == dmatrix![15., 15., 25., 10., 10.]);
     }
 }

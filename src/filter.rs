@@ -1,7 +1,7 @@
 /**
  * Refer: https://github.com/MichaelMauderer/filter-rs
  */
-use nalgebra::{DVector, DMatrix, RealField};
+use nalgebra::{DMatrix, RealField};
 
 #[allow(non_snake_case)]
 #[derive(Debug)]
@@ -11,19 +11,19 @@ pub struct KalmanFilter<F: RealField>
     pub dim_z: usize,
     pub dim_u: usize,
 
-    pub x: DVector<F>,
+    pub x: DMatrix<F>,
     pub P: DMatrix<F>,
-    pub x_prior: DVector<F>,
+    pub x_prior: DMatrix<F>,
     pub P_prior: DMatrix<F>,
-    pub x_post: DVector<F>,
+    pub x_post: DMatrix<F>,
     pub P_post: DMatrix<F>,
-    pub z: Option<DVector<F>>,
+    pub z: Option<DMatrix<F>>,
     pub R: DMatrix<F>,
     pub Q: DMatrix<F>,
     pub B: Option<DMatrix<F>>,
     pub F: DMatrix<F>,
     pub H: DMatrix<F>,
-    pub y: DVector<F>,
+    pub y: DMatrix<F>,
     pub K: DMatrix<F>,
     pub S: DMatrix<F>,
     pub SI: DMatrix<F>,
@@ -33,7 +33,7 @@ pub struct KalmanFilter<F: RealField>
 #[allow(non_snake_case)]
 impl<F> KalmanFilter<F> where F: RealField + Copy {
     pub fn new(dim_x: usize, dim_z: usize, dim_u: usize) -> Self {
-        let x = DVector::<F>::from_element(dim_x, F::zero());
+        let x = DMatrix::<F>::from_element(1, dim_x, F::zero());
         let P = DMatrix::<F>::identity(dim_x, dim_x);
         let Q = DMatrix::<F>::identity(dim_x, dim_x);
         let F = DMatrix::<F>::identity(dim_x, dim_x);
@@ -44,7 +44,7 @@ impl<F> KalmanFilter<F> where F: RealField + Copy {
         let z = None;
 
         let K = DMatrix::<F>::from_element(dim_x, dim_z, F::zero());
-        let y = DVector::<F>::from_element(dim_z, F::one());
+        let y = DMatrix::<F>::from_element(1, dim_z, F::one());
         let S = DMatrix::<F>::from_element(dim_z, dim_z, F::zero());
         let SI = DMatrix::<F>::from_element(dim_z, dim_z, F::zero());
 
@@ -80,7 +80,7 @@ impl<F> KalmanFilter<F> where F: RealField + Copy {
     }
 
     pub fn predict(&mut self,
-        u: Option<&DVector<F>>,
+        u: Option<&DMatrix<F>>,
         B: Option<&DMatrix<F>>, F: Option<&DMatrix<F>>,
         Q: Option<&DMatrix<F>>,
     ) {
@@ -101,7 +101,7 @@ impl<F> KalmanFilter<F> where F: RealField + Copy {
     }
 
     /// Add a new measurement (z) to the Kalman filter.
-    pub fn update(&mut self, z: &DVector<F>, R: Option<&DMatrix<F>>, H: Option<&DMatrix<F>>) {
+    pub fn update(&mut self, z: &DMatrix<F>, R: Option<&DMatrix<F>>, H: Option<&DMatrix<F>>) {
         let R = R.unwrap_or(&self.R);
         let H = H.unwrap_or(&self.H);
 
@@ -127,7 +127,7 @@ impl<F> KalmanFilter<F> where F: RealField + Copy {
 
     /// Predict state (prior) using the Kalman filter state propagation equations.
     /// Only x is updated, P is left unchanged.
-    pub fn predict_steadystate(&mut self, u: Option<&DVector<F>>, B: Option<&DMatrix<F>>) {
+    pub fn predict_steadystate(&mut self, u: Option<&DMatrix<F>>, B: Option<&DMatrix<F>>) {
         let B = if B.is_some() { B } else { self.B.as_ref() };
 
         if B.is_some() && u.is_some() {
@@ -142,7 +142,7 @@ impl<F> KalmanFilter<F> where F: RealField + Copy {
 
     /// Add a new measurement (z) to the Kalman filter without recomputing the Kalman gain K,
     /// the state covariance P, or the system uncertainty S.
-    pub fn update_steadystate(&mut self, z: &DVector<F>) {
+    pub fn update_steadystate(&mut self, z: &DMatrix<F>) {
         self.y = z - &self.H * &self.x;
         self.x = &self.x + &self.K * &self.y;
 
@@ -151,7 +151,7 @@ impl<F> KalmanFilter<F> where F: RealField + Copy {
         self.P_post = self.P.clone();
     }
 
-    pub fn get_prediction(&self, u: Option<&DVector<F>>,) -> (DVector<F>, DMatrix<F>) {
+    pub fn get_prediction(&self, u: Option<&DMatrix<F>>,) -> (DMatrix<F>, DMatrix<F>) {
         let Q = &self.Q;
         let F = &self.F;
         let P = &self.P;
@@ -172,7 +172,7 @@ impl<F> KalmanFilter<F> where F: RealField + Copy {
     }
 
     ///  Computes the new estimate based on measurement `z` and returns it without altering the state of the filter.
-    pub fn get_update(&self, z: &DVector<F>) -> (DVector<F>, DMatrix<F>) {
+    pub fn get_update(&self, z: &DMatrix<F>) -> (DMatrix<F>, DMatrix<F>) {
         let R = &self.R;
         let H = &self.H;
         let P = &self.P;
@@ -197,12 +197,12 @@ impl<F> KalmanFilter<F> where F: RealField + Copy {
     }
 
     /// Returns the residual for the given measurement (z). Does not alter the state of the filter.
-    pub fn residual_of(&self, z: &DVector<F>) -> DVector<F> {
+    pub fn residual_of(&self, z: &DMatrix<F>) -> DMatrix<F> {
         z - (&self.H * &self.x_prior)
     }
 
     /// Helper function that converts a state into a measurement.
-    pub fn measurement_of_state(&self, x: &DVector<F>) -> DVector<F> {
+    pub fn measurement_of_state(&self, x: &DMatrix<F>) -> DMatrix<F> {
         &self.H * x
     }
 }

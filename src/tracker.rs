@@ -50,7 +50,7 @@ type TrackBox = DMatrix<f64>;
 trait Tracker {
     fn _box(self) -> TrackBox;
     fn is_invalid(self) -> bool;
-    fn _predict(self);
+    fn _predict(&mut self);
 }
 
 impl SingleObjectTracker {
@@ -111,7 +111,7 @@ impl Tracker for SingleObjectTracker {
         todo!();
     }
 
-    fn _predict(self) {
+    fn _predict(&mut self) {
         todo!();
     }
 }
@@ -157,13 +157,13 @@ impl Tracker for KalmanTracker {
         todo!();
     }
 
-    fn _predict(self) {
+    fn _predict(&mut self) {
         self._tracker.predict(None, None, None, None)
     }
 }
 
 trait BaseMatchingFunction {
-    fn call(&self, trackers: Vec<Box<dyn Tracker>>, detections: Vec<Detection>);
+    fn call(&self, trackers: &Vec<Box<dyn Tracker>>, detections: Vec<Detection>);
 }
 
 struct IOUAndFeatureMatchingFunction {
@@ -225,17 +225,19 @@ impl MultiObjectTracker {
         }
     }
 
-    pub fn step(&self, detections: Vec<Detection>) {
+    pub fn step(&mut self, detections: Vec<Detection>) {
         let detections = detections
             .into_iter()
             .filter(|det| det._box.is_some())
             .collect::<Vec<_>>();
 
-        for t in self.trackers.iter() {
-            (*t)._predict();
+        for t in self.trackers.iter_mut() {
+            t._predict();
         }
 
-        let matches = self.matching_fn.unwrap().call(self.trackers, detections);
+        self.matching_fn.as_ref().map(|v| v.call(&self.trackers, detections));
+
+
     }
 }
 
@@ -250,7 +252,7 @@ mod test {
 
     #[test]
     fn test_tracker_diverges() {
-        let spec = ModelPreset.constant_velocity_and_static_box_size_2d.values();
+        let spec = ModelPreset::constant_velocity_and_static_box_size_2d().values();
         let _box = dmatrix![0., 0., 10., 10.];
         let mot = MultiObjectTracker::new(
             0.1,

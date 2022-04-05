@@ -4,7 +4,7 @@ use nalgebra::{dmatrix, DVector, DMatrix, Matrix2x1};
 use crate::Q_discrete_white_noise;
 use nalgebra::Dynamic;
 
-struct ModelPreset {
+pub struct ModelPreset {
 }
 
 impl ModelPreset {

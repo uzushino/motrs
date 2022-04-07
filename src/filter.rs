@@ -211,7 +211,7 @@ impl<F> KalmanFilter<F> where F: RealField + Copy {
 mod tests {
     use assert_approx_eq::assert_approx_eq;
     use nalgebra::base::Vector1;
-    use nalgebra::{U1, U2, Vector2, Matrix2, Matrix1, dvector};
+    use nalgebra::{U1, U2, Vector2, Matrix2, Matrix1, dmatrix};
 
     use super::*;
 
@@ -221,7 +221,7 @@ mod tests {
 
         for i in 0..1000 {
             let zf = i as f32;
-            let z = dvector!(zf);
+            let z = dmatrix!(zf);
 
             kf.predict(None, None, None, None);
             kf.update(&z, None, None);
@@ -234,7 +234,7 @@ mod tests {
     fn test_1d_reference() {
         let mut kf: KalmanFilter<f64> = KalmanFilter::new(2, 1, 1);
 
-        kf.x = dvector!(2.0, 0.0);
+        kf.x = dmatrix!(2.0, 0.0);
 
         kf.F = DMatrix::from_row_slice(2, 2, &[
             1.0, 1.0,
@@ -246,7 +246,7 @@ mod tests {
         kf.Q = DMatrix::repeat(2, 2, 0.001).transpose();
 
         for t in 0..100 {
-            let z = dvector!(t as f64);
+            let z = dmatrix!(t as f64);
 
             kf.update(&z, None, None);
             kf.predict(None, None, None, None);

@@ -12,19 +12,19 @@ impl ModelPreset {
         ModelPreset {}
     }
 
-    pub fn constant_velocity_and_static_box_size_2d() -> HashMap<String, usize> {
+    pub fn constant_velocity_and_static_box_size_2d() -> HashMap<String, f64> {
         let key = vec![
             String::from("order_pos"),
             String::from("dim_pos"),
             String::from("order_size"),
             String::from("dim_size"),
         ];
-        let value = vec![1, 2, 0, 2];
+        let value = vec![1., 2., 0., 2.];
 
         key.into_iter().zip(value.into_iter()).collect::<HashMap<_, _> >()
     }
 
-    pub fn constant_acceleration_and_static_box_size_2d() -> HashMap<String, usize> {
+    pub fn constant_acceleration_and_static_box_size_2d() -> HashMap<String, f64> {
         let key = vec![
             String::from("order_pos"),
             String::from("dim_pos"),
@@ -32,7 +32,7 @@ impl ModelPreset {
             String::from("dim_size"),
         ];
 
-        let value = vec![2, 2, 0, 2];
+        let value = vec![2., 2., 0., 2.];
 
         key.into_iter().zip(value.into_iter()).collect::<HashMap<_, _> >()
     }

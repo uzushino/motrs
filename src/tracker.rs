@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use nalgebra::{DMatrix, dmatrix, DMatrixSlice};
 use nalgebra::base::dimension::{ Const, Dynamic };
+use std::cmp::max;
+
 use crate::filter::KalmanFilter;
 use crate::model::{Model, self, ModelPreset};
 
@@ -163,14 +165,21 @@ impl Tracker for KalmanTracker {
 }
 
 fn matrix_to_vec(mat: &DMatrix<f64>) -> Vec<f64> {
-    mat.iter().map(|m| m.clone()).collect::<Vec<_>>()
+    let (row, col) = mat.shape();
+    let mut result = Vec::default();
+
+    for r in 0..row {
+        for  c in 0..col {
+            result.push(mat[(r, c)]);
+        }
+    }
+
+    result
 }
 
-fn matrix_split(mat: DMatrix<f64>, indecies_num: usize) -> Vec<DMatrix<f64>> {
+fn matrix_split(mat: &DMatrix<f64>, indecies_num: usize) -> Vec<DMatrix<f64>> {
     let c = mat.ncols() / indecies_num;
     let r = mat.nrows() / c;
-
-    dbg!(&(r, c));
 
     let mut splitted = Vec::default();
     for i in 0..indecies_num {
@@ -181,14 +190,45 @@ fn matrix_split(mat: DMatrix<f64>, indecies_num: usize) -> Vec<DMatrix<f64>> {
     splitted
 }
 
+fn matrix_maximum(a: &DMatrix<f64>, b: &DMatrix<f64>) -> DMatrix<f64> {
+    let cols = a.ncols();
+    let rows = a.nrows();
+
+    let mut result = DMatrix::zeros(rows, cols);
+    for r in 0..rows {
+        for c in 0..cols {
+            result[(r, c)] = b[(0, c)].max(a[(r, c)]);
+        }
+    }
+    result
+}
+
 fn calculate_iou(bboxes1: DMatrix<f64>, bboxes2: DMatrix<f64>, dim: usize) {
-    let r = bboxes1.shape().0;
+    let r = bboxes1.nrows();
     let bboxes1 = bboxes1.reshape_generic(Dynamic::new(r / dim * 2), Dynamic::new(dim * 2));
 
-    let r = bboxes2.shape().0;
+    let r = bboxes2.nrows();
     let bboxes2 = bboxes2.reshape_generic(Dynamic::new(r / dim * 2), Dynamic::new(dim * 2));
 
+    let coords_b1 = matrix_split(&bboxes1, 2 * dim);
+    let coords_b2 = matrix_split(&bboxes2, 2 * dim);
 
+    let mut coords1: Vec<DMatrix<f64>> = Vec::default();
+    for _ in 0..dim {
+        coords1.push(DMatrix::zeros(bboxes1.nrows(), bboxes2.nrows()));
+    }
+
+    let mut coords2: Vec<DMatrix<f64>> = Vec::default();
+    for _ in 0..dim {
+        coords2.push(DMatrix::zeros(bboxes1.nrows(), bboxes2.nrows()));
+    }
+
+    let val_inter = 1.0;
+    let val_b1 = 1.0;
+    let val_b2 = 1.0;
+
+    for d in 0..dim {
+    }
 }
 
 
@@ -347,8 +387,6 @@ mod test {
             5., 6., 7., 8.,
         ]);
         let actual = matrix_to_vec(&_box);
-        println!("{}", _box);
-        println!("{:?}", actual);
 
         assert!(actual == vec![1., 2., 3., 4., 5., 6., 7., 8.]);
     }
@@ -360,13 +398,31 @@ mod test {
             5., 6., 7., 8.,
         ]);
 
-        let actual = matrix_split(_box, 4);
+        let actual = matrix_split(&_box, 4);
         let expect = vec![
             DMatrix::from_row_slice(2, 1, &[1., 5.]),
             DMatrix::from_row_slice(2, 1, &[2., 6.]),
             DMatrix::from_row_slice(2, 1, &[3., 7.]),
             DMatrix::from_row_slice(2, 1, &[4., 8.]),
         ];
+
+        assert!(actual == expect);
+    }
+
+    #[test]
+    fn test_matrix_maximum() {
+        let a = DMatrix::from_row_slice(2, 4, &[
+            1., 2., 3., 4.,
+            5., 6., 7., 8.,
+        ]);
+
+        let b = DMatrix::from_row_slice(1, 4, &[0., 1., 9., 10.]);
+
+        let actual = matrix_maximum(&a, &b);
+        let expect = DMatrix::from_row_slice(2, 4, &[
+            1., 2., 9., 10.,
+            5., 6., 9., 10.,
+        ]);
 
         assert!(actual == expect);
     }

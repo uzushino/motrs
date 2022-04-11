@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::ops::Div;
 use nalgebra::{DMatrix, dmatrix, DMatrixSlice};
 use nalgebra::base::dimension::{ Const, Dynamic };
 use std::cmp::max;
@@ -195,15 +196,67 @@ fn matrix_maximum(a: &DMatrix<f64>, b: &DMatrix<f64>) -> DMatrix<f64> {
     let rows = a.nrows();
 
     let mut result = DMatrix::zeros(rows, cols);
+
     for r in 0..rows {
         for c in 0..cols {
             result[(r, c)] = b[(0, c)].max(a[(r, c)]);
         }
     }
+
     result
 }
 
-fn calculate_iou(bboxes1: DMatrix<f64>, bboxes2: DMatrix<f64>, dim: usize) {
+fn matrix_minimum(a: &DMatrix<f64>, b: &DMatrix<f64>) -> DMatrix<f64> {
+    let cols = a.ncols();
+    let rows = a.nrows();
+
+    let mut result = DMatrix::zeros(rows, cols);
+
+    for r in 0..rows {
+        for c in 0..cols {
+            result[(r, c)] = b[(0, c)].min(a[(r, c)]);
+        }
+    }
+
+    result
+}
+
+fn matrix_clip(mat: &DMatrix<f64>, min_value: f64, max_value: f64) -> DMatrix<f64> {
+    let cols = mat.ncols();
+    let rows = mat.nrows();
+
+    let mut result = DMatrix::zeros(rows, cols);
+
+    for r in 0..rows {
+        for c in 0..cols {
+            let v = mat[(r, c)].min(min_value);
+            let v = v.max(min_value);
+
+            result[(r, c)] = v;
+        }
+    }
+
+    result
+}
+
+fn matrix_div(a: &DMatrix<f64>, b: &DMatrix<f64>) -> DMatrix<f64> {
+    let cols = a.ncols();
+    let rows = a.nrows();
+
+    let mut result = DMatrix::zeros(rows, cols);
+
+    for r in 0..rows {
+        for c in 0..cols {
+            let v = a[(r, c)] / b[(r, c)];
+            result[(r, c)] = v;
+        }
+    }
+
+    result
+}
+
+
+fn calculate_iou(bboxes1: DMatrix<f64>, bboxes2: DMatrix<f64>, dim: usize) -> DMatrix<f64> {
     let r = bboxes1.nrows();
     let bboxes1 = bboxes1.reshape_generic(Dynamic::new(r / dim * 2), Dynamic::new(dim * 2));
 
@@ -223,14 +276,26 @@ fn calculate_iou(bboxes1: DMatrix<f64>, bboxes2: DMatrix<f64>, dim: usize) {
         coords2.push(DMatrix::zeros(bboxes1.nrows(), bboxes2.nrows()));
     }
 
-    let val_inter = 1.0;
-    let val_b1 = 1.0;
-    let val_b2 = 1.0;
+    let zero = DMatrix::zeros(bboxes1.nrows(), bboxes1.ncols());
+    let mut val_inter: DMatrix<f64> = DMatrix::repeat(bboxes1.nrows(), bboxes1.ncols(), 1.);
+    let mut val_b1: DMatrix<f64> = DMatrix::repeat(bboxes1.nrows(), bboxes1.ncols(), 1.);
+    let mut val_b2: DMatrix<f64> = DMatrix::repeat(bboxes1.nrows(), bboxes1.ncols(), 1.);
 
     for d in 0..dim {
-    }
-}
+        coords1[d] = matrix_maximum(&coords_b1[d], &coords_b2[d].transpose());
+        coords2[d] = matrix_minimum(&coords_b1[d + dim], &coords_b2[d + dim].transpose());
 
+        let sub = coords2[d].clone() - coords1[d].clone();
+        val_inter *= matrix_maximum(&sub, &zero);
+        val_b1 *= coords_b1[d + dim].clone() - coords_b1[d].clone();
+        val_b2 *= coords_b2[d + dim].clone() - coords_b2[d].clone();
+    }
+
+    let tmp = val_b1 + val_b2.transpose() - val_inter.clone();
+    let iou = matrix_div(&val_inter, &matrix_clip(&tmp, 0., 0.));
+
+    iou
+}
 
 fn cost_matrix_iou_feature(
     trackers: &Vec<Box<dyn Tracker>>,
@@ -415,7 +480,6 @@ mod test {
             1., 2., 3., 4.,
             5., 6., 7., 8.,
         ]);
-
         let b = DMatrix::from_row_slice(1, 4, &[0., 1., 9., 10.]);
 
         let actual = matrix_maximum(&a, &b);

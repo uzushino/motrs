@@ -42,7 +42,7 @@ struct SingleObjectTracker {
     update_feature_fn: Box<dyn Fn(DMatrix<f64>, DMatrix<f64>) -> DMatrix<f64>>,
 
     score: Option<f64>,
-    feature: Option<DMatrix<f64>>,
+    pub feature: Option<DMatrix<f64>>,
 
     class_id_counts: HashMap<i64, i64>,
     class_id: Option<i64>,
@@ -191,34 +191,72 @@ fn matrix_split(mat: &DMatrix<f64>, indecies_num: usize) -> Vec<DMatrix<f64>> {
     splitted
 }
 
-fn matrix_maximum(a: &DMatrix<f64>, b: &DMatrix<f64>) -> DMatrix<f64> {
-    let cols = a.ncols();
-    let rows = a.nrows();
-
-    let mut result = DMatrix::zeros(rows, cols);
-
-    for r in 0..rows {
-        for c in 0..cols {
-            result[(r, c)] = b[(0, c)].max(a[(r, c)]);
-        }
+fn create_matrix_broadcasting(rows: usize, cols: usize, a: &DMatrix<f64>) -> DMatrix<f64> {
+    if a.ncols() == 1 {
+        DMatrix::from_fn(rows, cols, |r, _c| a[(r, 0)])
+    } else {
+        DMatrix::from_fn(rows, cols, |_r, c| a[(0, c)])
     }
+}
 
-    result
+fn matrix_maximum(a: &DMatrix<f64>, b: &DMatrix<f64>) -> DMatrix<f64> {
+    if a.ncols() == b.ncols() && a.nrows() == b.nrows() {
+        let cols = a.ncols();
+        let rows = a.nrows();
+        let mut result = DMatrix::zeros(rows, cols);
+
+        for r in 0..rows {
+            for c in 0..cols {
+                result[(r, c)] = b[(0, c)].max(a[(r, c)]);
+            }
+        }
+
+        result
+    } else {
+        let a = if a.ncols() == 1 || a.nrows() == 1 {
+            create_matrix_broadcasting(b.nrows(), b.ncols(), a)
+        } else {
+            a.clone()
+        };
+
+        let b = if b.ncols() == 1 || b.nrows() == 1 {
+            create_matrix_broadcasting(a.nrows(), a.ncols(), b)
+        } else {
+            b.clone()
+        };
+
+        matrix_maximum(&a, &b)
+    }
 }
 
 fn matrix_minimum(a: &DMatrix<f64>, b: &DMatrix<f64>) -> DMatrix<f64> {
-    let cols = a.ncols();
-    let rows = a.nrows();
+    if a.ncols() == b.ncols() && a.nrows() == b.nrows() {
+        let cols = a.ncols();
+        let rows = a.nrows();
+        let mut result = DMatrix::zeros(rows, cols);
 
-    let mut result = DMatrix::zeros(rows, cols);
-
-    for r in 0..rows {
-        for c in 0..cols {
-            result[(r, c)] = b[(0, c)].min(a[(r, c)]);
+        for r in 0..rows {
+            for c in 0..cols {
+                result[(r, c)] = b[(0, c)].min(a[(r, c)]);
+            }
         }
-    }
 
-    result
+        result
+    } else {
+        let a = if a.ncols() == 1 || a.nrows() == 1 {
+            create_matrix_broadcasting(b.nrows(), b.ncols(), a)
+        } else {
+            a.clone()
+        };
+
+        let b = if b.ncols() == 1 || b.nrows() == 1 {
+            create_matrix_broadcasting(a.nrows(), a.ncols(), b)
+        } else {
+            b.clone()
+        };
+
+        matrix_minimum(&a, &b)
+    }
 }
 
 fn matrix_clip(mat: &DMatrix<f64>, min_value: f64, max_value: f64) -> DMatrix<f64> {
@@ -258,13 +296,21 @@ fn matrix_div(a: &DMatrix<f64>, b: &DMatrix<f64>) -> DMatrix<f64> {
 
 fn calculate_iou(bboxes1: DMatrix<f64>, bboxes2: DMatrix<f64>, dim: usize) -> DMatrix<f64> {
     let r = bboxes1.nrows();
-    let bboxes1 = bboxes1.reshape_generic(Dynamic::new(r / dim * 2), Dynamic::new(dim * 2));
+    let bboxes1 = bboxes1.reshape_generic(
+        Dynamic::new(r),
+        Dynamic::new(dim * 2)
+    );
 
     let r = bboxes2.nrows();
-    let bboxes2 = bboxes2.reshape_generic(Dynamic::new(r / dim * 2), Dynamic::new(dim * 2));
+    let bboxes2 = bboxes2.reshape_generic(
+        Dynamic::new(r),
+        Dynamic::new(dim * 2)
+    );
 
     let coords_b1 = matrix_split(&bboxes1, 2 * dim);
     let coords_b2 = matrix_split(&bboxes2, 2 * dim);
+
+    println!("{:?} {:?}", coords_b1, coords_b2);
 
     let mut coords1: Vec<DMatrix<f64>> = Vec::default();
     for _ in 0..dim {
@@ -277,15 +323,17 @@ fn calculate_iou(bboxes1: DMatrix<f64>, bboxes2: DMatrix<f64>, dim: usize) -> DM
     }
 
     let zero = DMatrix::zeros(bboxes1.nrows(), bboxes1.ncols());
-    let mut val_inter: DMatrix<f64> = DMatrix::repeat(bboxes1.nrows(), bboxes1.ncols(), 1.);
-    let mut val_b1: DMatrix<f64> = DMatrix::repeat(bboxes1.nrows(), bboxes1.ncols(), 1.);
-    let mut val_b2: DMatrix<f64> = DMatrix::repeat(bboxes1.nrows(), bboxes1.ncols(), 1.);
+    let mut val_inter: DMatrix<f64> = DMatrix::repeat(1, 1, 1.);
+    let mut val_b1: DMatrix<f64> = DMatrix::repeat(1, 1, 1.);
+    let mut val_b2: DMatrix<f64> = DMatrix::repeat(1, 1, 1.);
+
 
     for d in 0..dim {
         coords1[d] = matrix_maximum(&coords_b1[d], &coords_b2[d].transpose());
         coords2[d] = matrix_minimum(&coords_b1[d + dim], &coords_b2[d + dim].transpose());
 
         let sub = coords2[d].clone() - coords1[d].clone();
+
         val_inter *= matrix_maximum(&sub, &zero);
         val_b1 *= coords_b1[d + dim].clone() - coords_b1[d].clone();
         val_b2 *= coords_b2[d + dim].clone() - coords_b2[d].clone();
@@ -297,12 +345,16 @@ fn calculate_iou(bboxes1: DMatrix<f64>, bboxes2: DMatrix<f64>, dim: usize) -> DM
     iou
 }
 
+fn _sequence_has_none(seq: &Vec<Option<DMatrix<f64>>>) -> bool {
+    seq.iter().any(|v| v.is_none())
+}
+
 fn cost_matrix_iou_feature(
-    trackers: &Vec<Box<dyn Tracker>>,
+    trackers: &Vec<SingleObjectTracker>,
     detections: &Vec<Detection>,
-    feature_similarity_fn: Box<dyn FnOnce() -> f64>,
+    feature_similarity_fn: Box<dyn FnOnce(Vec<Option<DMatrix<f64>>>, Vec<Option<DMatrix<f64>>>) -> f64>,
     feature_similarity_beta: Option<f64>
-) {
+) -> (DMatrix<f64>, DMatrix<f64>) {
     let r = trackers.len();
     let c = (trackers.first()).unwrap()._box().shape().1;
     let mut data = Vec::new();
@@ -316,12 +368,44 @@ fn cost_matrix_iou_feature(
     let c = (detections.first()).unwrap()._box.clone().map(|b| b.shape().1.clone()).unwrap_or(0);
     let mut data = Vec::new();
     for detection in detections.iter() {
-        let mut vs = (*detection)._box.iter().map(|m| m.clone()).collect::<Vec<_>>();
+        let mut vs = (*detection)._box
+            .iter()
+            .map(|m| matrix_to_vec(&m))
+            .flatten()
+            .collect::<Vec<_>>();
         data.append(&mut vs);
     }
     let b2 = DMatrix::from_vec(r, c, data);
     let inferred_dim = b1.shape().1 / 2;
-    //let iou_mat = calculate_iou(b1, b2, inferred_dim);
+    let iou_mat = calculate_iou(b1, b2, inferred_dim);
+    let mut apt_mat = iou_mat.clone();
+
+    if feature_similarity_beta.is_some() {
+        let f1 = trackers
+            .iter()
+            .map(|t| t.feature.clone())
+            .collect::<Vec<_>>();
+        let f2 =detections
+            .iter()
+            .map(|t| t.feature.clone())
+            .collect::<Vec<_>>();
+
+        if _sequence_has_none(&f1) || _sequence_has_none(&f2) {
+            apt_mat = iou_mat.clone();
+        } else {
+            let sim_mat = feature_similarity_fn(f1, f2);
+            let feature_similarity_beta = feature_similarity_beta.unwrap();
+            let sim_mat = feature_similarity_beta + (1. - feature_similarity_beta) * sim_mat;
+
+            apt_mat = iou_mat.clone() * sim_mat;
+        }
+    } else {
+        apt_mat = iou_mat.clone();
+    }
+
+    let cost_mat = -1.0 * apt_mat;
+
+    (cost_mat, iou_mat.clone())
 }
 
 fn match_by_cost_matrix(
@@ -334,10 +418,11 @@ fn match_by_cost_matrix(
     if trackers.len() == 0 || detections.len() == 0 {
         return dmatrix![];
     }
-
-
-
-    dmatrix![]
+/*
+    let (cost_mat, iou_mat)
+        = cost_matrix_iou_feature(trackers, detections, kwargs);
+ */
+        return dmatrix![];
 }
 
 trait BaseMatchingFunction {
@@ -353,7 +438,8 @@ struct IOUAndFeatureMatchingFunction {
 struct Detection {
     pub score: f64,
     pub class_id: f64,
-    pub _box: Option<DMatrix<f64>>
+    pub _box: Option<DMatrix<f64>>,
+    pub feature: Option<DMatrix<f64>>,
 }
 
 struct MultiObjectTracker {
@@ -489,5 +575,37 @@ mod test {
         ]);
 
         assert!(actual == expect);
+
+        let a = DMatrix::from_row_slice(1, 1, &[20.]);
+        let b = DMatrix::from_row_slice(1, 2, &[10., 30.]);
+
+        assert!(matrix_maximum(&a, &b) == dmatrix![20., 30.]);
+    }
+
+    #[test]
+    fn test_iou() {
+        let b1 = DMatrix::from_row_slice(1, 2, &[10., 20.]);
+        let b2 = DMatrix::from_row_slice(2, 2, &[10., 21., 30., 40.]);
+
+        println!("{} {}", b1, b2);
+
+        let iou_1d = calculate_iou(b1, b2, 1);
+        println!("{}", iou_1d);
+
+        assert!(iou_1d == dmatrix![0.9091, 0.]);
+
+        /*
+        b1 = [[20.1, 20.1, 30.1, 30.1], [15, 15, 25, 25]]
+        b2 = [[10, 10, 20, 20]]
+        iou_2d = calculate_iou(b1, b2, dim=2)
+        assert_almost_equal(iou_2d, [[0], [0.1429]])
+
+        b1 = [[10, 10, 10, 20, 20, 20]]
+        b2 = [[10, 11, 10.2, 21, 19.9, 20.3],
+              [30, 30, 30, 90, 90, 90]]
+        iou_3d = calculate_iou(b1, b2, dim=3)
+
+        assert_almost_equal(iou_3d, [[0.7811, 0]])
+ */
     }
 }

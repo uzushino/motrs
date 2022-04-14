@@ -207,7 +207,7 @@ fn matrix_maximum(a: &DMatrix<f64>, b: &DMatrix<f64>) -> DMatrix<f64> {
 
         for r in 0..rows {
             for c in 0..cols {
-                result[(r, c)] = b[(0, c)].max(a[(r, c)]);
+                result[(r, c)] = b[(r, c)].max(a[(r, c)]);
             }
         }
 
@@ -237,7 +237,7 @@ fn matrix_minimum(a: &DMatrix<f64>, b: &DMatrix<f64>) -> DMatrix<f64> {
 
         for r in 0..rows {
             for c in 0..cols {
-                result[(r, c)] = b[(0, c)].min(a[(r, c)]);
+                result[(r, c)] = b[(r, c)].min(a[(r, c)]);
             }
         }
 
@@ -259,7 +259,7 @@ fn matrix_minimum(a: &DMatrix<f64>, b: &DMatrix<f64>) -> DMatrix<f64> {
     }
 }
 
-fn matrix_clip(mat: &DMatrix<f64>, min_value: f64, max_value: f64) -> DMatrix<f64> {
+fn matrix_clip(mat: &DMatrix<f64>, min_value: Option<f64>, max_value: Option<f64>) -> DMatrix<f64> {
     let cols = mat.ncols();
     let rows = mat.nrows();
 
@@ -267,8 +267,13 @@ fn matrix_clip(mat: &DMatrix<f64>, min_value: f64, max_value: f64) -> DMatrix<f6
 
     for r in 0..rows {
         for c in 0..cols {
-            let v = mat[(r, c)].min(min_value);
-            let v = v.max(min_value);
+            let mut v = mat[(r, c)];
+            if let Some(mv) = min_value {
+                v = v.max(mv);
+            }
+            if let Some(mv) = max_value {
+                v = v.min(mv);
+            }
 
             result[(r, c)] = v;
         }
@@ -293,6 +298,36 @@ fn matrix_div(a: &DMatrix<f64>, b: &DMatrix<f64>) -> DMatrix<f64> {
     result
 }
 
+fn matrix_mul(a: &DMatrix<f64>, b: &DMatrix<f64>) -> DMatrix<f64> {
+    if a.ncols() == b.ncols() && a.nrows() == b.nrows() {
+        let cols = a.ncols();
+        let rows = a.nrows();
+        let mut result = DMatrix::zeros(rows, cols);
+
+        for r in 0..rows {
+            for c in 0..cols {
+                result[(r, c)] = b[(r, c)] * a[(r, c)];
+            }
+        }
+
+        result
+    } else {
+        let a = if a.ncols() == 1 || a.nrows() == 1 {
+            create_matrix_broadcasting(b.nrows(), b.ncols(), a)
+        } else {
+            a.clone()
+        };
+
+        let b = if b.ncols() == 1 || b.nrows() == 1 {
+            create_matrix_broadcasting(a.nrows(), a.ncols(), b)
+        } else {
+            b.clone()
+        };
+
+        matrix_mul(&a, &b)
+    }
+}
+
 
 fn calculate_iou(bboxes1: DMatrix<f64>, bboxes2: DMatrix<f64>, dim: usize) -> DMatrix<f64> {
     let r = bboxes1.nrows();
@@ -310,8 +345,6 @@ fn calculate_iou(bboxes1: DMatrix<f64>, bboxes2: DMatrix<f64>, dim: usize) -> DM
     let coords_b1 = matrix_split(&bboxes1, 2 * dim);
     let coords_b2 = matrix_split(&bboxes2, 2 * dim);
 
-    println!("{:?} {:?}", coords_b1, coords_b2);
-
     let mut coords1: Vec<DMatrix<f64>> = Vec::default();
     for _ in 0..dim {
         coords1.push(DMatrix::zeros(bboxes1.nrows(), bboxes2.nrows()));
@@ -325,8 +358,7 @@ fn calculate_iou(bboxes1: DMatrix<f64>, bboxes2: DMatrix<f64>, dim: usize) -> DM
     let zero = DMatrix::zeros(bboxes1.nrows(), bboxes1.ncols());
     let mut val_inter: DMatrix<f64> = DMatrix::repeat(1, 1, 1.);
     let mut val_b1: DMatrix<f64> = DMatrix::repeat(1, 1, 1.);
-    let mut val_b2: DMatrix<f64> = DMatrix::repeat(1, 1, 1.);
-
+    let mut val_b2: DMatrix<f64> = DMatrix::repeat(2, 1, 1.);
 
     for d in 0..dim {
         coords1[d] = matrix_maximum(&coords_b1[d], &coords_b2[d].transpose());
@@ -336,11 +368,14 @@ fn calculate_iou(bboxes1: DMatrix<f64>, bboxes2: DMatrix<f64>, dim: usize) -> DM
 
         val_inter *= matrix_maximum(&sub, &zero);
         val_b1 *= coords_b1[d + dim].clone() - coords_b1[d].clone();
-        val_b2 *= coords_b2[d + dim].clone() - coords_b2[d].clone();
+
+        val_b2 = matrix_mul(&val_b2, &(coords_b2[d + dim].clone() - coords_b2[d].clone()));
     }
 
-    let tmp = val_b1 + val_b2.transpose() - val_inter.clone();
-    let iou = matrix_div(&val_inter, &matrix_clip(&tmp, 0., 0.));
+    let tmp = create_matrix_broadcasting(val_inter.nrows(), val_inter.ncols(), &val_b1) + val_b2.transpose() - val_inter.clone();
+    println!("tmp: {} clip: {}", tmp, matrix_clip(&tmp, Some(0.), None));
+
+    let iou = matrix_div(&val_inter, &matrix_clip(&tmp, Some(0.), None));
 
     iou
 }
@@ -513,8 +548,8 @@ mod test {
     use std::ops::Mul;
 
     use super::*;
-    use assert_approx_eq::assert_approx_eq;
-    use nalgebra::dmatrix;
+    use nalgebra::{dmatrix};
+    use approx::assert_relative_eq;
 
 
     #[test]
@@ -584,22 +619,20 @@ mod test {
 
     #[test]
     fn test_iou() {
-        let b1 = DMatrix::from_row_slice(1, 2, &[10., 20.]);
-        let b2 = DMatrix::from_row_slice(2, 2, &[10., 21., 30., 40.]);
+        // let b1 = DMatrix::from_row_slice(1, 2, &[10., 20.]);
+        // let b2 = DMatrix::from_row_slice(2, 2, &[10., 21., 30., 40.]);
+        // let iou_1d = calculate_iou(b1, b2, 1);
 
-        println!("{} {}", b1, b2);
+        // assert_relative_eq!(iou_1d , dmatrix![0.9091, 0.], epsilon = 1e-5f64);
 
-        let iou_1d = calculate_iou(b1, b2, 1);
-        println!("{}", iou_1d);
+        let b1 = DMatrix::from_row_slice(2, 4, &[20.1, 20.1, 30.1, 30.1, 15., 15., 25., 25.]);
+        let b2 = DMatrix::from_row_slice(1, 4, &[10., 10., 20., 20.]);
+        let iou_2d = calculate_iou(b1, b2, 2);
 
-        assert!(iou_1d == dmatrix![0.9091, 0.]);
+        let expect = DMatrix::from_row_slice(2, 1, &[0., 0.1429]);
+        assert!(iou_2d == expect);
 
         /*
-        b1 = [[20.1, 20.1, 30.1, 30.1], [15, 15, 25, 25]]
-        b2 = [[10, 10, 20, 20]]
-        iou_2d = calculate_iou(b1, b2, dim=2)
-        assert_almost_equal(iou_2d, [[0], [0.1429]])
-
         b1 = [[10, 10, 10, 20, 20, 20]]
         b2 = [[10, 11, 10.2, 21, 19.9, 20.3],
               [30, 30, 30, 90, 90, 90]]

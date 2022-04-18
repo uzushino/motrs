@@ -344,7 +344,7 @@ fn _sequence_has_none(seq: &Vec<Option<DMatrix<f64>>>) -> bool {
 fn cost_matrix_iou_feature(
     trackers: &Vec<SingleObjectTracker>,
     detections: &Vec<Detection>,
-    feature_similarity_fn: Box<dyn FnOnce(Vec<Option<DMatrix<f64>>>, Vec<Option<DMatrix<f64>>>) -> f64>,
+    feature_similarity_fn: Option<Box<dyn FnOnce(Vec<Option<DMatrix<f64>>>, Vec<Option<DMatrix<f64>>>) -> f64>>,
     feature_similarity_beta: Option<f64>
 ) -> (DMatrix<f64>, DMatrix<f64>) {
     let r = trackers.len();
@@ -385,7 +385,7 @@ fn cost_matrix_iou_feature(
         if _sequence_has_none(&f1) || _sequence_has_none(&f2) {
             apt_mat = iou_mat.clone();
         } else {
-            let sim_mat = feature_similarity_fn(f1, f2);
+            let sim_mat = feature_similarity_fn.unwrap()(f1, f2);
             let feature_similarity_beta = feature_similarity_beta.unwrap();
             let sim_mat = feature_similarity_beta + (1. - feature_similarity_beta) * sim_mat;
 
@@ -396,25 +396,25 @@ fn cost_matrix_iou_feature(
     }
 
     let cost_mat = -1.0 * apt_mat;
-
     (cost_mat, iou_mat.clone())
 }
 
 fn match_by_cost_matrix(
-    trackers: &Vec<Box<dyn Tracker>>,
+    trackers: &Vec<SingleObjectTracker>,
     detections: &Vec<Detection>,
     min_iou: f64,
     multi_match_min_iou: f64,
-    kwargs: HashMap<String, f64>
+    feature_similarity_fn: Option<Box<dyn FnOnce(Vec<Option<DMatrix<f64>>>, Vec<Option<DMatrix<f64>>>) -> f64>>,
+    feature_similarity_beta: Option<f64>
 ) -> DMatrix<f64> {
     if trackers.len() == 0 || detections.len() == 0 {
         return dmatrix![];
     }
-/*
+
     let (cost_mat, iou_mat)
-        = cost_matrix_iou_feature(trackers, detections, kwargs);
- */
-        return dmatrix![];
+        = cost_matrix_iou_feature(trackers, detections, feature_similarity_fn, feature_similarity_beta);
+
+    dmatrix![]
 }
 
 trait BaseMatchingFunction {
@@ -597,5 +597,29 @@ mod test {
 
 
         assert_relative_eq!(iou_3d, DMatrix::from_row_slice(1, 2, &[0.7811, 0.]), epsilon = 1e-3f64);
+    }
+
+    #[test]
+    fn test_iou() {
+        let matching_fn = IOUAndFeatureMatchingFunction::new();
+        let b1 = MultiObjectTracker::new(
+            0.041666666666666664,
+            HashMap::default(),
+            matching_fn,
+            tracker_kwargs,
+            matching_fn_kwargs,
+            active_tracks_kwargs
+        );
+        let b2 = DMatrix::from_row_slice(2, 2, &[10., 21., 30., 40.]);
+        let iou_1d = match_by_cost_matrix(
+            b1,
+            b2,
+            1.,
+            0.,
+            None,
+            None
+        );
+
+        assert_relative_eq!(iou_1d , dmatrix![0.9091, 0.], epsilon = 1e-3f64);
     }
 }

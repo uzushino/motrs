@@ -417,6 +417,27 @@ fn match_by_cost_matrix(
     dmatrix![]
 }
 
+fn cosine_distance(vector1: &DMatrix<f64>, vector2: &DMatrix<f64>) -> f64 {
+    let norm = vector1.dot(vector1) * vector2.dot(vector2);
+
+    if norm > 0.0 {
+        return vector1.dot(vector2) / norm.sqrt()
+    }
+
+    0.0
+}
+
+fn angular_similarity(vector1: DMatrix<f64>, vector2: DMatrix<f64>) -> DMatrix<f64> {
+    let mut result = DMatrix::zeros(vector1.nrows(), 1);
+
+    for row in 0..vector1.nrows() {
+        let mat = DMatrix::from(vector1.rows(row, 1));
+        result[(row, 0)] = 1. - cosine_distance(&mat, &vector2) / 2.;
+    }
+
+    result
+}
+
 trait BaseMatchingFunction {
     fn call(&self, trackers: &Vec<Box<dyn Tracker>>, detections: &Vec<Detection>) -> DMatrix<f64>;
 }
@@ -424,7 +445,35 @@ trait BaseMatchingFunction {
 struct IOUAndFeatureMatchingFunction {
     pub min_iou: f64,
     pub multi_match_min_iou: f64,
-    pub feature_similarity_fn: Box<dyn FnOnce()>
+    pub feature_similarity_fn: Option<Box<dyn FnOnce(Vec<DMatrix<f64>>, Vec<DMatrix<f64>>) -> f64>>,
+    pub feature_similarity_beta: Option<f64>,
+}
+
+impl IOUAndFeatureMatchingFunction {
+    pub fn new(
+        min_iou: f64,
+        multi_match_min_iou: f64,
+        feature_similarity_fn: Option<Box<dyn FnOnce(Vec<DMatrix<f64>>, Vec<DMatrix<f64>>) -> f64>>,
+        feature_similarity_beta: Option<f64>
+    ) -> Self {
+        Self {
+            min_iou,
+            multi_match_min_iou,
+            feature_similarity_fn,
+            feature_similarity_beta
+       }
+    }
+}
+
+impl Default for IOUAndFeatureMatchingFunction {
+    fn default() -> Self {
+        Self {
+            min_iou: 0.1,
+            multi_match_min_iou: 1.0,
+            feature_similarity_beta: None,
+            feature_similarity_fn: None,
+        }
+    }
 }
 
 struct Detection {
@@ -600,7 +649,8 @@ mod test {
     }
 
     #[test]
-    fn test_iou() {
+    fn test_match_by_cost_matrix() {
+        /*
         let matching_fn = IOUAndFeatureMatchingFunction::new();
         let b1 = MultiObjectTracker::new(
             0.041666666666666664,
@@ -621,5 +671,21 @@ mod test {
         );
 
         assert_relative_eq!(iou_1d , dmatrix![0.9091, 0.], epsilon = 1e-3f64);
+ */
+    }
+
+    #[test]
+    fn test_anguler_similarity() {
+        let a = DMatrix::from_row_slice(2, 3, &[
+            11.03354574, 136.08532899, 234.84454335,
+            44.22407625, 159.94237106, 201.87850449,
+        ]);
+
+        let b = DMatrix::from_row_slice(1, 3, &[
+            30.636022406032907, 160.02707867096902, 208.51482290476193
+        ]);
+
+        let result = angular_similarity(a, b);
+        println!("{}", result);
     }
 }

@@ -367,8 +367,24 @@ fn match_by_cost_matrix(
 
     let (cost_mat, iou_mat)
         = cost_matrix_iou_feature(trackers, detections, feature_similarity_fn, feature_similarity_beta);
+    let (row_ind, col_ind) = linear_sum_assignment(&cost_mat);
+    let mut matches = vec![];
 
-    dmatrix![]
+    for (r, c) in row_ind.iter().zip(col_ind.iter()) {
+        if iou_mat[(*r, *c)] >= min_iou {
+            matches.push((*r, *c))
+        }
+
+        if multi_match_min_iou < 1. {
+            for c2 in 0..iou_mat.shape().1 {
+                if c2 != *c && iou_mat[(*r, c2)] > multi_match_min_iou {
+                    matches.push((*r, c2))
+                }
+            }
+        }
+    }
+
+    DMatrix::from_row_slice(1, matches.len(), matches.as_slice())
 }
 
 #[cfg(test)]
@@ -379,7 +395,6 @@ mod test {
 
     use nalgebra::{dmatrix};
     use approx::assert_relative_eq;
-
 
     #[test]
     fn test_tracker_diverges() {

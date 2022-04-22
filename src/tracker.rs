@@ -349,7 +349,7 @@ fn cost_matrix_iou_feature(
         apt_mat = iou_mat.clone();
     }
 
-    let cost_mat = -1.0 * apt_mat;
+    let cost_mat = -1. * apt_mat;
     (cost_mat, iou_mat.clone())
 }
 
@@ -393,23 +393,5 @@ mod test {
             None,
             None
         );
-    }
-
-
-    #[test]
-    fn test_munkres() {
-        use pathfinding::kuhn_munkres::kuhn_munkres_min;
-        use pathfinding::matrix::Matrix;
-        use ordered_float::OrderedFloat;
-
-        let weights: Matrix<OrderedFloat<f64>> = Matrix::from_rows(vec![
-            vec![OrderedFloat(100.), OrderedFloat(110.), OrderedFloat(90.)],
-            vec![OrderedFloat(95.), OrderedFloat(130.), OrderedFloat(75.)],
-            vec![OrderedFloat(95.), OrderedFloat(140.), OrderedFloat(65.)],
-        ]).unwrap();
-
-        let (cash_flow, assignments) = kuhn_munkres_min(&weights);
-        dbg!(cash_flow);
-        dbg!(assignments);
     }
 }

@@ -1,6 +1,10 @@
 use nalgebra::{DMatrix, dmatrix};
 use nalgebra::base::dimension::Dynamic;
 
+use pathfinding::kuhn_munkres::kuhn_munkres_min;
+use pathfinding::matrix::Matrix;
+use ordered_float::OrderedFloat;
+
 use crate::matrix::*;
 
 pub fn calculate_iou(bboxes1: DMatrix<f64>, bboxes2: DMatrix<f64>, dim: usize) -> DMatrix<f64> {
@@ -77,6 +81,21 @@ pub fn angular_similarity(vector1: DMatrix<f64>, vector2: DMatrix<f64>) -> DMatr
     result
 }
 
+pub fn linear_sum_assignment(mat: &DMatrix<f64>) -> (Vec<usize>, Vec<usize>) {
+    let mut mat_vec = vec![vec![OrderedFloat(0.); mat.ncols()]; mat.nrows()];
+
+    for row in 0..mat.nrows() {
+        for col in 0..mat.nrows() {
+            mat_vec[row][col] = OrderedFloat(mat[(row, col)]);
+        }
+    }
+
+    let weights: Matrix<OrderedFloat<f64>> = Matrix::from_rows(mat_vec).unwrap();
+    let (cash_flow, assignments) = kuhn_munkres_min(&weights);
+
+    ((0..mat.nrows()).into_iter().collect::<Vec<_>>(), assignments)
+}
+
 mod test {
     use super::*;
 
@@ -148,5 +167,4 @@ mod test {
 
         assert_relative_eq!(expect, actual, epsilon = 1e-3f64);
     }
-
 }

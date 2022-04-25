@@ -23,7 +23,13 @@ fn get_kalman_object_tracker<F>(model: &Model, x0: Option<DMatrix<f64>>) -> Kalm
     tracker
 }
 
-fn exponential_moving_average_fn(gamma: f64) -> Box<dyn Fn(DMatrix<f64>, DMatrix<f64>) -> DMatrix<f64>> {
+fn exponential_moving_average_fn(gamma: f64) -> Box<dyn Fn(f64, f64) -> f64> {
+    Box::new(move |old, new| -> f64 {
+        gamma * old + (1.0 - gamma) * new
+    })
+}
+
+fn exponential_moving_average_matrix_fn(gamma: f64) -> Box<dyn Fn(DMatrix<f64>, DMatrix<f64>) -> DMatrix<f64>> {
     Box::new(move |old, new| -> DMatrix<f64> {
         gamma * old + (1.0 - gamma) * new
     })
@@ -36,7 +42,7 @@ struct SingleObjectTracker {
     staleness: f64,
     max_staleness: f64,
 
-    update_score_fn: Box<dyn Fn(DMatrix<f64>, DMatrix<f64>) -> DMatrix<f64>>,
+    update_score_fn: Box<dyn Fn(f64, f64) -> f64>,
     update_feature_fn: Box<dyn Fn(DMatrix<f64>, DMatrix<f64>) -> DMatrix<f64>>,
 
     score: Option<f64>,
@@ -52,6 +58,7 @@ trait Tracker {
     fn _box(&self) -> TrackBox;
     fn is_invalid(&self) -> bool;
     fn _predict(&mut self);
+    fn update(&mut self, detection: &Detection);
 }
 
 impl SingleObjectTracker {
@@ -78,7 +85,7 @@ impl SingleObjectTracker {
             class_id,
             class_id_counts,
             update_score_fn: exponential_moving_average_fn(kwargs.get("smooth_score_gamma").map(|v| *v).unwrap_or(0.8)),
-            update_feature_fn: exponential_moving_average_fn(kwargs.get("smooth_score_gamma").map(|v| *v).unwrap_or(0.9)),
+            update_feature_fn: exponential_moving_average_matrix_fn(kwargs.get("smooth_score_gamma").map(|v| *v).unwrap_or(0.9)),
         };
 
         tracker.class_id = tracker.update_class_id(kwargs.get("class_id0").map(|v| *v as i64));
@@ -115,6 +122,10 @@ impl Tracker for SingleObjectTracker {
     fn _predict(&mut self) {
         todo!();
     }
+
+    fn update(&mut self, detection: &Detection) {
+        todo!();
+    }
 }
 
 struct KalmanTracker {
@@ -147,6 +158,16 @@ impl KalmanTracker {
     fn update_class_id(&mut self, class_id: Option<i64>) -> Option<i64> {
         self._base.update_class_id(class_id)
     }
+
+    fn _update_box(&mut self, detection: &Detection) {
+        let z = self.model.box_to_z(detection._box.unwrap());
+        self._tracker.update(&z, None, None);
+    }
+
+    fn unstale(&mut self, rate: Option<f64>) -> f64 {
+        self._base.staleness = 0_f64.max(self._base.staleness - rate.unwrap_or(2.));
+        self._base.staleness
+    }
 }
 
 impl Tracker for KalmanTracker {
@@ -161,6 +182,16 @@ impl Tracker for KalmanTracker {
     fn _predict(&mut self) {
         self._tracker.predict(None, None, None, None)
     }
+
+    fn update(&mut self, detection: &Detection) {
+        self._update_box(detection);
+        self._base.steps_positive += 1;
+        self._base.class_id = self.update_class_id(Some(detection.class_id));
+        self._base.score = Some((*self._base.update_score_fn)(self._base.score.unwrap(), detection.score));
+        self._base.feature = Some((*self._base.update_feature_fn)(self._base.feature.unwrap(), detection.feature.unwrap()));
+        self.unstale(Some(3.));
+    }
+
 }
 
 trait BaseMatchingFunction {
@@ -216,16 +247,16 @@ impl BaseMatchingFunction for IOUAndFeatureMatchingFunction {
 
 struct Detection {
     pub score: f64,
-    pub class_id: f64,
+    pub class_id: i64,
     pub _box: Option<DMatrix<f64>>,
     pub feature: Option<DMatrix<f64>>,
 }
 
 struct MultiObjectTracker {
-    trackers: Vec<Box<dyn Tracker>>,
+    trackers: Vec<SingleObjectTracker>,
     tracker_kwargs: HashMap<String, f64>,
     tracker_clss: Option<Box<dyn FnOnce(Option<DMatrix<f64>>, Option<DMatrix<f64>>, Detection) -> KalmanTracker>>,
-    matching_fn: Option<Box<dyn BaseMatchingFunction>>,
+    matching_fn: Option<IOUAndFeatureMatchingFunction>,
     matching_fn_kwargs: HashMap<String, f64>,
     active_tracks_kwargs: HashMap<String, f64>,
     detections_matched_ids: Vec<String>,
@@ -235,7 +266,7 @@ impl MultiObjectTracker {
     pub fn new(
         dt: f64,
         model_spec: HashMap<String, f64>,
-        matching_fn: Option<Box<dyn BaseMatchingFunction>>,
+        matching_fn: Option<IOUAndFeatureMatchingFunction>,
         tracker_kwargs: Option<HashMap<String, f64>>,
         matching_fn_kwargs: Option<HashMap<String, f64>>,
         active_tracks_kwargs: Option<HashMap<String, f64>>
@@ -247,7 +278,7 @@ impl MultiObjectTracker {
         let tracker_clss = move |x0, box0, det: Detection| {
             let mut kwargs = tracker_kwargs_.unwrap_or_default();
             kwargs.insert(String::from("score0"), det.score);
-            kwargs.insert(String::from("class_id0"), det.class_id);
+            kwargs.insert(String::from("class_id0"), det.class_id as f64);
 
             KalmanTracker::new(
                 x0,
@@ -278,11 +309,16 @@ impl MultiObjectTracker {
             t._predict();
         }
 
-        //let matches = self.matching_fn.as_ref().map(|v| v.call(&self.trackers, &detections));
-        //self.detections_matched_ids = Vec::with_capacity(detections.len());
+        let matches = self.matching_fn.as_ref().map(|v| v.call(&self.trackers, &detections));
+        self.detections_matched_ids = Vec::with_capacity(detections.len());
 
-        //for _match in matches {
-        //}
+        let matches = matches.unwrap();
+        for c in 0..matches.nrows() {
+            let track_idx = matches[(c, 0)];
+            let det_idx = matches[(c, 1)];
+
+            self.trackers[track_idx as usize].update(&detections[det_idx as usize]);
+        }
     }
 }
 

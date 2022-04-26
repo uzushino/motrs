@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
+use std::vec;
 use nalgebra::{ DMatrix, dmatrix };
 
 use crate::filter::KalmanFilter;
@@ -253,7 +255,7 @@ struct Detection {
 }
 
 struct MultiObjectTracker {
-    trackers: Vec<SingleObjectTracker>,
+    trackers: Vec<Box<dyn Tracker>>,
     tracker_kwargs: HashMap<String, f64>,
     tracker_clss: Option<Box<dyn FnOnce(Option<DMatrix<f64>>, Option<DMatrix<f64>>, Detection) -> KalmanTracker>>,
     matching_fn: Option<IOUAndFeatureMatchingFunction>,
@@ -275,6 +277,7 @@ impl MultiObjectTracker {
         model_kwards.insert(String::from("dt"), dt);
 
         let tracker_kwargs_ = tracker_kwargs.clone();
+
         let tracker_clss = move |x0, box0, det: Detection| {
             let mut kwargs = tracker_kwargs_.unwrap_or_default();
             kwargs.insert(String::from("score0"), det.score);
@@ -318,6 +321,25 @@ impl MultiObjectTracker {
             let det_idx = matches[(c, 1)];
 
             self.trackers[track_idx as usize].update(&detections[det_idx as usize]);
+        }
+
+        let assigned_det_idxs = if matches.len() > 0 {
+            matches.index((.., 1)).data.into_slice().to_vec()
+        } else {
+            vec![]
+        };
+
+        let idxs = HashSet::from(assigned_det_idxs.iter().map(|v| *v as u64).collect());
+        for det_idx in HashSet::from((0..detections.len()).into_iter().collect()).difference(&idxs) {
+            let det: Detection = detections[*det_idx];
+
+            let tracker = (*self.tracker_clss.unwrap())(
+                None,
+                det._box,
+                det
+            );
+
+            self.trackers.push(tracker);
         }
     }
 }

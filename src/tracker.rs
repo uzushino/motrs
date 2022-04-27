@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::vec;
 use nalgebra::{ DMatrix, dmatrix };
+use std::iter::FromIterator;
 
 use crate::filter::KalmanFilter;
 use crate::model::{ Model, ModelPreset };
@@ -60,6 +61,7 @@ trait Tracker {
     fn _box(&self) -> TrackBox;
     fn is_invalid(&self) -> bool;
     fn _predict(&mut self);
+    fn _feature(&self) -> Option<DMatrix<f64>>;
     fn update(&mut self, detection: &Detection);
 }
 
@@ -128,6 +130,10 @@ impl Tracker for SingleObjectTracker {
     fn update(&mut self, detection: &Detection) {
         todo!();
     }
+
+    fn _feature(&self) -> Option<DMatrix<f64>> {
+        self.feature.clone()
+    }
 }
 
 struct KalmanTracker {
@@ -194,10 +200,13 @@ impl Tracker for KalmanTracker {
         self.unstale(Some(3.));
     }
 
+    fn _feature(&self) -> Option<DMatrix<f64>> {
+        self._base.feature
+    }
 }
 
 trait BaseMatchingFunction {
-    fn call(&self, trackers: &Vec<SingleObjectTracker>, detections: &Vec<Detection>) -> DMatrix<f64>;
+    fn call(&self, trackers: &Vec<Box<dyn Tracker>>, detections: &Vec<Detection>) -> DMatrix<f64>;
 }
 
 struct IOUAndFeatureMatchingFunction {
@@ -235,7 +244,7 @@ impl Default for IOUAndFeatureMatchingFunction {
 }
 
 impl BaseMatchingFunction for IOUAndFeatureMatchingFunction {
-    fn call(&self, trackers: &Vec<SingleObjectTracker>, detections: &Vec<Detection>) -> DMatrix<f64> {
+    fn call(&self, trackers: &Vec<Box<dyn Tracker>>, detections: &Vec<Detection>) -> DMatrix<f64> {
         match_by_cost_matrix(
             trackers,
             detections,
@@ -329,23 +338,25 @@ impl MultiObjectTracker {
             vec![]
         };
 
-        let idxs = HashSet::from(assigned_det_idxs.iter().map(|v| *v as u64).collect());
-        for det_idx in HashSet::from((0..detections.len()).into_iter().collect()).difference(&idxs) {
-            let det: Detection = detections[*det_idx];
+        let assigned_det_idxs = assigned_det_idxs.iter().map(|v| *v as u64);
+        let idxs: HashSet<u64> = HashSet::from_iter(assigned_det_idxs);
+        let diff: HashSet<u64> = HashSet::from_iter((0..detections.len()).into_iter().map(|v| v as u64));
+        for det_idx in diff.difference(&idxs) {
+            let det: Detection = detections[*det_idx as usize];
 
             let tracker = (*self.tracker_clss.unwrap())(
                 None,
                 det._box,
-                det
+                det.clone()
             );
 
-            self.trackers.push(tracker);
+            self.trackers.push(Box::new(tracker));
         }
     }
 }
 
 fn cost_matrix_iou_feature(
-    trackers: &Vec<SingleObjectTracker>,
+    trackers: &Vec<Box<dyn Tracker>>,
     detections: &Vec<Detection>,
     feature_similarity_fn: Option<Box<dyn FnOnce(Vec<DMatrix<f64>>, Vec<DMatrix<f64>>) -> f64>>,
     feature_similarity_beta: Option<f64>
@@ -378,7 +389,7 @@ fn cost_matrix_iou_feature(
     if feature_similarity_beta.is_some() {
         let f1 = trackers
             .iter()
-            .map(|t| t.feature.clone())
+            .map(|t| (*t)._feature())
             .collect::<Vec<_>>();
         let f2 =detections
             .iter()
@@ -412,7 +423,7 @@ fn cost_matrix_iou_feature(
 }
 
 fn match_by_cost_matrix(
-    trackers: &Vec<SingleObjectTracker>,
+    trackers: &Vec<Box<dyn Tracker>>,
     detections: &Vec<Detection>,
     min_iou: f64,
     multi_match_min_iou: f64,
@@ -442,7 +453,7 @@ fn match_by_cost_matrix(
         }
     }
 
-    DMatrix::from_row_slice(1, matches.len(), matches.as_slice())
+    DMatrix::from_fn(1, matches.len(), |r, c| if c == 0 { matches[r].0 as f64 } else { matches[r].1 as f64 })
 }
 
 #[cfg(test)]

@@ -100,7 +100,7 @@ mod test {
     use super::*;
 
     use nalgebra::{dmatrix};
-    use approx::assert_relative_eq;
+    use approx::*;
 
     #[test]
     fn test_iou() {

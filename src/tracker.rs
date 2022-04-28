@@ -302,11 +302,22 @@ impl BaseMatchingFunction for IOUAndFeatureMatchingFunction {
 }
 
 #[derive(Clone)]
-struct Detection {
+pub struct Detection {
     pub score: f64,
     pub class_id: i64,
     pub _box: Option<DMatrix<f64>>,
     pub feature: Option<DMatrix<f64>>,
+}
+
+impl Default for Detection {
+    fn default() -> Self {
+        Self {
+            _box: Some(DMatrix::identity(1, 1)),
+            score: 0.,
+            class_id: 0, 
+            feature: None,
+        }
+    }
 }
 
 struct MultiObjectTracker {
@@ -529,6 +540,8 @@ mod test {
     use nalgebra::{dmatrix};
     use approx::assert_relative_eq;
 
+    use crate::testing::data_generator;
+    
     #[test]
     fn test_test_simple_tracking_objects_1() {
         let fps = 24.;
@@ -550,55 +563,46 @@ mod test {
             None,
             None
         );
-        let history : HashMap<i64, Vec<i64>>= HashMap::from([
+        let mut history : HashMap<i64, Vec<String>>= HashMap::from([
             (0, vec![]),
             (1, vec![]),
         ]);
+        let mut gen = data_generator(
+            num_steps, 
+            2,
+            0.01, 
+            0.2, 
+            0.0,
+            1.0
+        ).into_iter();
 
         for i in 0..num_steps {
-            let dets_gt = vec![
-                Detection {
-                    _box: Some(dmatrix![898.8722641472185, 693.1360376406628, 971.8722641472185, 761.1360376406628]),
-                    score: 1.00000,
-                    class_id: 6,
-                    feature: Some(dmatrix![243., 218., 81.])
-                },
-                Detection {
-                    _box: Some(dmatrix![896.0412653385631, 161.93504723886014, 1011.0412653385631, 230.93504723886014]),
-                    score: 1.00000,
-                    class_id: 8,
-                    feature: Some(dmatrix![243., 218., 81.])
-                }
-            ];
-            let dets_pred = vec![
-                Detection {
-                    _box: Some(dmatrix![902.4709983655653, 695.4248625080285, 974.014428106078, 758.4528762245636]),
-                    score: 0.54528,
-                    class_id: 6,
-                    feature: Some(dmatrix![245.17134892368088, 215.6596636435056, 83.80623132587618])
-                },
-                Detection{
-                    _box: None,
-                    score: 0.54246,
-                    class_id: 8,
-                    feature: Some(dmatrix![55.52617203833598, 71.12990206788292, 39.145747381769])
-                }
-            ];
+            if let Some((dets_gt, dets_pred)) = gen.next() {
+                let detections = dets_pred.into_iter().filter(|d| d._box.is_some()).collect::<Vec<_>>();
+                let _ = mot.step(detections);
 
-            let detections = dets_pred.into_iter().filter(|d| d._box.is_some()).collect::<Vec<_>>();
-            let _ = mot.step(detections);
+                if (i as f64) <= num_steps_warmup {
+                    continue
+                }
+            
+                let matches = match_by_cost_matrix(
+                    &mot.trackers,
+                    &dets_gt,
+                    min_iou,
+                    multi_match_min_iou,
+                    None,
+                    feature_similarity_beta,
+                );
 
-            if (i as f64) <= num_steps_warmup {
-                continue
+                for m in 0..matches.shape().0 {
+                    let (gidx, tidx) = (matches[(m, 0)], matches[(m, 1)]);
+                    let track_id = mot.trackers[tidx as usize].id();
+                    
+                    //history[&(gidx as i64)].push(&mut track_id);
+                }
             }
-
-            matches = match_by_cost_matrix(mot.trackers, dets_gt)
-            for m in matches:
-                gidx, tidx = m[0], m[1]
-                track_id = mot.trackers[tidx].id
-                history[gidx].append(track_id)
-
-            assert len(mot.trackers) == num_objects
+            
+            assert!(mot.trackers.len() == 2);
         }
     }
 

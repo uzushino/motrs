@@ -11,8 +11,9 @@ uuid = { version = "0.8.1", features = ["serde", "v4"] }
 pathfinding = "3.0.12"
 ordered-float = "2.0"
 approx = "*"
-genawaiter = "*"
+genawaiter = "0.99.1"
 rand = "*"
+rand_distr = "*"
 
 [dev-dependencies]
 assert_approx_eq = "*"

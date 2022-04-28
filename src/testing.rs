@@ -1,21 +1,34 @@
-use genawaiter::{sync::gen, yield_};
-use rand::{thread_rng, Rng};
-use rand::distributions::Uniform;
+use genawaiter::{rc::gen, yield_};
+use genawaiter::sync::{Co, Gen, GenBoxed};
 
-pub fn rand_int(rng: &mut rand::rngs::ThreadRng, min_val: i64,  max_val: i64) -> i64{
+use rand::{thread_rng, Rng};
+use rand::distributions::{ Uniform };
+use rand_distr::{Normal, Distribution};
+
+use nalgebra::{ DMatrix, dmatrix };
+use crate::tracker::Detection;
+
+const CANVAS_SIZE: i64 = 1000;
+
+pub fn rand_int<R: Rng>(rng: &mut R, min_val: i64,  max_val: i64) -> i64{
    rng.sample(Uniform::new(min_val, max_val))
 }
 
-pub fn rand_uniform(rng: &mut rand::rngs::ThreadRng, min_val: f64,  max_val: f64) -> f64{
+pub fn rand_uniform<R: Rng>(rng: &mut R, min_val: f64,  max_val: f64) -> f64{
    rng.sample::<f64, _>(Uniform::new(min_val, max_val))
 }
 
-pub fn rand_color(rng: &mut rand::rngs::ThreadRng) -> [i64; 3] {
+pub fn rand_color<R: Rng>(rng: &mut R) -> [i64; 3] {
    let r = rand_int(rng, 0, 255);
    let g = rand_int(rng, 0, 255);
    let b = rand_int(rng, 0, 255);
 
    [r, g, b]
+}
+
+pub fn rand_guass<R: Rng>(rng: &mut R, mu: f64, sigma2: f64) -> f64 {
+    let normal = Normal::new(mu, sigma2.sqrt()).unwrap();
+    normal.sample(rng)
 }
 
 struct Actor {
@@ -98,9 +111,49 @@ impl Actor {
         (x, y)
     }
 
-    fn detections(&self, step: i64) {
-        let (xmin, ymin)  = self.position_at(step);
-        let box_gt = [xmin, ymin, xmin + (self.width as f64), ymin + (self.height + f64)];
+    fn detections(&mut self, step: &i64) -> (Detection, Detection) {
+        let (xmin, ymin)  = self.position_at(*step);
+        let mut rng = rand::thread_rng();
+        let box_gt = [xmin, ymin, xmin + (self.width as f64), ymin + (self.height as f64)];
+        let mut box_pred = if rng.gen::<f64>() < self.miss_prob {
+            None
+        } else {
+            let _pred = box_gt
+                .iter()
+                .map(|v| rand_guass(&mut rng, 0., self.det_err_sigma) + v)
+                .collect::<Vec<_>>();
+            Some(_pred)
+        };
+
+        if rng.gen::<f64>() < self.disappear_prob {
+            self.disappear_steps = rand_int(&mut rng, 1, 24);
+        }
+
+        if self.disappear_steps > 0 {
+            box_pred = None;
+            self.disappear_steps -= 1;
+        }
+
+        let det_gt = Detection { 
+            _box: Some(DMatrix::from_row_slice(1, 4, &box_gt)),
+            score: 1.,
+            class_id: self.class_id,
+            feature: Some(DMatrix::from_fn(1, 3, |r, c| self.color[c] as f64)),
+        };
+
+        let feature_pred = self.color
+            .iter()
+            .map(|v| rand_guass(&mut rng, 0., 5.) + (*v as f64))
+            .collect::<Vec<_>>();
+
+        let det_pred = Detection {
+            _box: Some(DMatrix::from_row_slice(1, 3, box_pred.unwrap().as_slice())),
+            score: rand_uniform(&mut rng, 0.5, 1.),
+            class_id: std::cmp::max(0, self.class_id + rand_int(&mut rng, -1, 1)),
+            feature: Some(DMatrix::from_row_slice(1, 3, feature_pred.as_slice())),
+        };
+
+        (det_gt, det_pred)
     }
 }
 
@@ -116,7 +169,26 @@ impl Default for Actor {
     }
 }
 
+pub fn data_generator(num_steps: i64, num_objects: i64, max_omega: f64, miss_prob: f64, disappear_prob: f64, det_err_sigma: f64)  -> GenBoxed<(Vec<Detection>, Vec<Detection>)> {
+    Gen::new_boxed(|co| {
+        async move {
+            let mut actors = (0..num_objects)
+                .map(|_| Actor::new(max_omega, miss_prob, disappear_prob, det_err_sigma, CANVAS_SIZE, None))
+                .collect::<Vec<_>>();
 
-
-pub fn data_generator(num_steps: i64, num_objects: i64, max_omega: f64, miss_prob: f64, disappear_prob: f64, det_err_sigma: f64) {
+            for step in 0..num_steps {
+                let mut dets_gt = vec![];
+                let mut dets_pred = vec![];
+                
+                for mut actor in actors.iter_mut() {
+                    let (det_gt, det_pred) = (&mut actor).detections(&step);
+                    
+                    dets_gt.push(det_gt);
+                    dets_pred.push(det_pred);
+                }
+                
+                co.yield_((dets_gt, dets_pred)).await;
+            }
+        }
+    })
 }

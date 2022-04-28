@@ -9,6 +9,8 @@ use crate::model::{ Model, ModelPreset };
 use crate::metrics::*;
 use crate::matrix::*;
 
+type Track = (String, DMatrix<f64>, Option<f64>, Option<i64>);
+
 fn get_kalman_object_tracker<F>(model: &Model, x0: Option<DMatrix<f64>>) -> KalmanFilter<f64>
 {
     let mut tracker = KalmanFilter::<f64>::new(1, 1, 1);
@@ -58,11 +60,18 @@ struct SingleObjectTracker {
 type TrackBox = DMatrix<f64>;
 
 trait Tracker {
-    fn _box(&self) -> TrackBox;
     fn is_invalid(&self) -> bool;
     fn _predict(&mut self);
+    fn _box(&self) -> TrackBox;
     fn _feature(&self) -> Option<DMatrix<f64>>;
     fn update(&mut self, detection: &Detection);
+
+    fn staleness(&self) -> f64 { todo!() }
+    fn steps_positive(&self) -> i64 { todo!() }
+    fn steps_alive(&self) -> i64 { todo!() }
+    fn id(&self) -> String { todo!() }
+    fn score(&self) -> Option<f64> { todo!() }
+    fn class_id(&self) -> Option<i64> { todo!() }
 }
 
 impl SingleObjectTracker {
@@ -134,6 +143,24 @@ impl Tracker for SingleObjectTracker {
     fn _feature(&self) -> Option<DMatrix<f64>> {
         self.feature.clone()
     }
+    fn staleness(&self) -> f64 {
+        self.staleness
+    }
+    fn steps_positive(&self) -> i64 {
+        self.steps_positive
+    }
+    fn steps_alive(&self) -> i64 {
+        self.steps_alive
+    }
+    fn id(&self) -> String {
+        self.id.clone()
+    }
+    fn score(&self) -> Option<f64> {
+        self.score
+    }
+    fn class_id(&self) -> Option<i64> {
+        self.class_id
+    }
 }
 
 struct KalmanTracker {
@@ -168,7 +195,7 @@ impl KalmanTracker {
     }
 
     fn _update_box(&mut self, detection: &Detection) {
-        let z = self.model.box_to_z(detection._box.unwrap());
+        let z = self.model.box_to_z(detection._box.clone().unwrap());
         self._tracker.update(&z, None, None);
     }
 
@@ -196,12 +223,30 @@ impl Tracker for KalmanTracker {
         self._base.steps_positive += 1;
         self._base.class_id = self.update_class_id(Some(detection.class_id));
         self._base.score = Some((*self._base.update_score_fn)(self._base.score.unwrap(), detection.score));
-        self._base.feature = Some((*self._base.update_feature_fn)(self._base.feature.unwrap(), detection.feature.unwrap()));
+        self._base.feature = Some((*self._base.update_feature_fn)(self._base.feature.clone().unwrap(), detection.feature.clone().unwrap()));
         self.unstale(Some(3.));
     }
 
     fn _feature(&self) -> Option<DMatrix<f64>> {
-        self._base.feature
+        self._base.feature.clone()
+    }
+    fn staleness(&self) -> f64 {
+        self._base.staleness()
+    }
+    fn steps_positive(&self) -> i64 {
+        self._base.steps_positive()
+    }
+    fn steps_alive(&self) -> i64 {
+        self._base.steps_alive()
+    }
+    fn id(&self) -> String {
+        self._base.id()
+    }
+    fn score(&self) -> Option<f64> {
+        self._base.score()
+    }
+    fn class_id(&self) -> Option<i64> {
+        self._base.class_id()
     }
 }
 
@@ -256,6 +301,7 @@ impl BaseMatchingFunction for IOUAndFeatureMatchingFunction {
     }
 }
 
+#[derive(Clone)]
 struct Detection {
     pub score: f64,
     pub class_id: i64,
@@ -266,11 +312,11 @@ struct Detection {
 struct MultiObjectTracker {
     trackers: Vec<Box<dyn Tracker>>,
     tracker_kwargs: HashMap<String, f64>,
-    tracker_clss: Option<Box<dyn FnOnce(Option<DMatrix<f64>>, Option<DMatrix<f64>>, Detection) -> KalmanTracker>>,
     matching_fn: Option<IOUAndFeatureMatchingFunction>,
     matching_fn_kwargs: HashMap<String, f64>,
     active_tracks_kwargs: HashMap<String, f64>,
     detections_matched_ids: Vec<String>,
+    model_kwargs: HashMap<String, f64>,
 }
 
 impl MultiObjectTracker {
@@ -285,30 +331,29 @@ impl MultiObjectTracker {
         let mut model_kwards = model_spec;
         model_kwards.insert(String::from("dt"), dt);
 
-        let tracker_kwargs_ = tracker_kwargs.clone();
-
-        let tracker_clss = move |x0, box0, det: Detection| {
-            let mut kwargs = tracker_kwargs_.unwrap_or_default();
-            kwargs.insert(String::from("score0"), det.score);
-            kwargs.insert(String::from("class_id0"), det.class_id as f64);
-
-            KalmanTracker::new(
-                x0,
-                box0,
-                model_kwards,
-                kwargs,
-            )
-        };
-
         Self {
             trackers: Vec::default(),
             tracker_kwargs: tracker_kwargs.unwrap_or_default(),
-            tracker_clss: Some(Box::new(tracker_clss)),
+            model_kwargs: model_kwards,
             matching_fn,
             matching_fn_kwargs: matching_fn_kwargs.unwrap_or_default(),
             active_tracks_kwargs: active_tracks_kwargs.unwrap_or_default(),
             detections_matched_ids: Vec::default(),
         }
+    }
+
+    fn tracker_clss(&self, x0: Option<DMatrix<f64>>, box0: Option<DMatrix<f64>>, det: Detection) -> Box<dyn Tracker> {
+        let mut kwargs = self.tracker_kwargs.clone();
+
+        kwargs.insert(String::from("score0"), det.score);
+        kwargs.insert(String::from("class_id0"), det.class_id as f64);
+
+        Box::new(KalmanTracker::new(
+            x0,
+            box0,
+            self.model_kwargs.clone(),
+            kwargs,
+        ))
     }
 
     pub fn step(&mut self, detections: Vec<Detection>) {
@@ -341,17 +386,35 @@ impl MultiObjectTracker {
         let assigned_det_idxs = assigned_det_idxs.iter().map(|v| *v as u64);
         let idxs: HashSet<u64> = HashSet::from_iter(assigned_det_idxs);
         let diff: HashSet<u64> = HashSet::from_iter((0..detections.len()).into_iter().map(|v| v as u64));
+
         for det_idx in diff.difference(&idxs) {
-            let det: Detection = detections[*det_idx as usize];
-
-            let tracker = (*self.tracker_clss.unwrap())(
-                None,
-                det._box,
-                det.clone()
-            );
-
-            self.trackers.push(Box::new(tracker));
+            let det = &detections[*det_idx as usize];
+            let tracker = self.tracker_clss(None, det._box.clone(), det.clone());
+            self.trackers.push(tracker);
         }
+
+        self.active_tracks(
+            self.active_tracks_kwargs["max_staleness_to_positive_ratio"],
+            self.active_tracks_kwargs["max_staleness"],
+            self.active_tracks_kwargs["min_steps_alive"] as i64
+        );
+    }
+
+    pub fn active_tracks(&self, max_staleness_to_positive_ratio: f64, max_staleness: f64, min_steps_alive: i64) -> Vec<Track> {
+        let mut tracks: Vec<Track> = Vec::default();
+
+        for tracker in self.trackers.iter() {
+            let cond1 = tracker.staleness() / (tracker.steps_positive() as f64) < max_staleness_to_positive_ratio;
+            let cond2 = tracker.staleness() < max_staleness;
+            let cond3 = tracker.steps_alive() >= min_steps_alive;
+
+            if cond1 && cond2 && cond3 {
+                let t = (tracker.id(), tracker._box(), tracker.score(), tracker.class_id());
+                tracks.push(t);
+            }
+        }
+
+        tracks
     }
 }
 
@@ -458,12 +521,86 @@ fn match_by_cost_matrix(
 
 #[cfg(test)]
 mod test {
+    use core::num;
     use std::ops::Mul;
 
     use super::*;
 
     use nalgebra::{dmatrix};
     use approx::assert_relative_eq;
+
+    #[test]
+    fn test_test_simple_tracking_objects_1() {
+        let fps = 24.;
+        let dt = 1. / fps;
+        let num_steps = 240;
+        let num_steps_warmup = 1. * fps;
+        let model_spec = HashMap::new();
+
+        let min_iou = 0.1;
+        let multi_match_min_iou = 1. + 1e-7;
+        let feature_similarity_fn = None;
+        let feature_similarity_beta = None;
+        let matching_fn = IOUAndFeatureMatchingFunction::new(min_iou, multi_match_min_iou, feature_similarity_fn, feature_similarity_beta);
+        let mut mot = MultiObjectTracker::new(
+            dt,
+            model_spec,
+            Some(matching_fn),
+            None,
+            None,
+            None
+        );
+        let history : HashMap<i64, Vec<i64>>= HashMap::from([
+            (0, vec![]),
+            (1, vec![]),
+        ]);
+
+        for i in 0..num_steps {
+            let dets_gt = vec![
+                Detection {
+                    _box: Some(dmatrix![898.8722641472185, 693.1360376406628, 971.8722641472185, 761.1360376406628]),
+                    score: 1.00000,
+                    class_id: 6,
+                    feature: Some(dmatrix![243., 218., 81.])
+                },
+                Detection {
+                    _box: Some(dmatrix![896.0412653385631, 161.93504723886014, 1011.0412653385631, 230.93504723886014]),
+                    score: 1.00000,
+                    class_id: 8,
+                    feature: Some(dmatrix![243., 218., 81.])
+                }
+            ];
+            let dets_pred = vec![
+                Detection {
+                    _box: Some(dmatrix![902.4709983655653, 695.4248625080285, 974.014428106078, 758.4528762245636]),
+                    score: 0.54528,
+                    class_id: 6,
+                    feature: Some(dmatrix![245.17134892368088, 215.6596636435056, 83.80623132587618])
+                },
+                Detection{
+                    _box: None,
+                    score: 0.54246,
+                    class_id: 8,
+                    feature: Some(dmatrix![55.52617203833598, 71.12990206788292, 39.145747381769])
+                }
+            ];
+
+            let detections = dets_pred.into_iter().filter(|d| d._box.is_some()).collect::<Vec<_>>();
+            let _ = mot.step(detections);
+
+            if (i as f64) <= num_steps_warmup {
+                continue
+            }
+
+            matches = match_by_cost_matrix(mot.trackers, dets_gt)
+            for m in matches:
+                gidx, tidx = m[0], m[1]
+                track_id = mot.trackers[tidx].id
+                history[gidx].append(track_id)
+
+            assert len(mot.trackers) == num_objects
+        }
+    }
 
     #[test]
     fn test_tracker_diverges() {

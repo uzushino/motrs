@@ -5,6 +5,7 @@ mod tracker;
 mod filter;
 mod matrix;
 mod metrics;
+mod testing;
 
 pub fn Q_discrete_white_noise(dim: usize, dt: f64, var: f64, block_size: usize, order_by_dim: bool) -> DMatrix<f64> {
     if vec![2, 3, 4].contains(&dim) {

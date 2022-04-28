@@ -124,32 +124,6 @@ mod test {
     }
 
     #[test]
-    fn test_match_by_cost_matrix() {
-        /*
-        let matching_fn = IOUAndFeatureMatchingFunction::default();
-        let b1 = MultiObjectTracker::new(
-            0.041666666666666664,
-            HashMap::default(),
-            Some(Box::new(matching_fn)),
-            tracker_kwargs,
-            matching_fn_kwargs,
-            active_tracks_kwargs
-        );
-        let b2 = DMatrix::from_row_slice(2, 2, &[10., 21., 30., 40.]);
-        let iou_1d = match_by_cost_matrix(
-            b1,
-            b2,
-            1.,
-            0.,
-            None,
-            None
-        );
-
-        assert_relative_eq!(iou_1d , dmatrix![0.9091, 0.], epsilon = 1e-3f64);
-*/
-    }
-
-    #[test]
     fn test_anguler_similarity() {
         let a = DMatrix::from_row_slice(2, 3, &[
             11., 136., 234.,

@@ -5,7 +5,7 @@ pub fn matrix_to_vec(mat: &na::DMatrix<f64>) -> Vec<f64> {
     let mut result = Vec::default();
 
     for r in 0..row {
-        for  c in 0..col {
+        for c in 0..col {
             result.push(mat[(r, c)]);
         }
     }
@@ -19,14 +19,18 @@ pub fn matrix_split(mat: &na::DMatrix<f64>, indecies_num: usize) -> Vec<na::DMat
 
     let mut splitted = Vec::default();
     for i in 0..indecies_num {
-        let sp = na::DMatrix::from(mat.index((.., (i*c)..((i+1)*c))));
+        let sp = na::DMatrix::from(mat.index((.., (i * c)..((i + 1) * c))));
         splitted.push(sp);
     }
 
     splitted
 }
 
-pub fn create_matrix_broadcasting(rows: usize, cols: usize, a: &na::DMatrix<f64>) -> na::DMatrix<f64> {
+pub fn create_matrix_broadcasting(
+    rows: usize,
+    cols: usize,
+    a: &na::DMatrix<f64>,
+) -> na::DMatrix<f64> {
     if a.ncols() == 1 && a.nrows() == 1 {
         na::DMatrix::from_fn(rows, cols, |_r, _c| a[(0, 0)])
     } else if a.ncols() == 1 {
@@ -36,7 +40,10 @@ pub fn create_matrix_broadcasting(rows: usize, cols: usize, a: &na::DMatrix<f64>
     }
 }
 
-pub fn matrix_broadcasting<F>(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>, f: F) -> na::DMatrix<f64> where F: Fn(usize, usize, &na::DMatrix<f64>, &na::DMatrix<f64>) -> f64 {
+pub fn matrix_broadcasting<F>(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>, f: F) -> na::DMatrix<f64>
+where
+    F: Fn(usize, usize, &na::DMatrix<f64>, &na::DMatrix<f64>) -> f64,
+{
     if a.ncols() == b.ncols() && a.nrows() == b.nrows() {
         let cols = a.ncols();
         let rows = a.nrows();
@@ -59,7 +66,7 @@ pub fn matrix_broadcasting<F>(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>, f: F) 
         } else {
             a.clone()
         };
-        let b =  if b.nrows() == 1 && b.ncols() == 1 {
+        let b = if b.nrows() == 1 && b.ncols() == 1 {
             na::DMatrix::repeat(a.nrows(), a.ncols(), b[(0, 0)])
         } else if b.nrows() == 1 {
             create_matrix_broadcasting(a.nrows(), b.ncols(), b)
@@ -70,7 +77,11 @@ pub fn matrix_broadcasting<F>(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>, f: F) 
         };
 
         if !(a.nrows() == b.nrows() && a.ncols() == b.ncols()) {
-            panic!("Can not broadcasting . a: {:?}, b: {:?}", a.shape(), b.shape());
+            panic!(
+                "Can not broadcasting . a: {:?}, b: {:?}",
+                a.shape(),
+                b.shape()
+            );
         }
 
         matrix_broadcasting(&a, &b, f)
@@ -134,7 +145,11 @@ pub fn matrix_dot(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>) -> na::DMatrix<f64
     }
 }
 
-pub fn matrix_clip(mat: &na::DMatrix<f64>, min_value: Option<f64>, max_value: Option<f64>) -> na::DMatrix<f64> {
+pub fn matrix_clip(
+    mat: &na::DMatrix<f64>,
+    min_value: Option<f64>,
+    max_value: Option<f64>,
+) -> na::DMatrix<f64> {
     let cols = mat.ncols();
     let rows = mat.nrows();
 
@@ -163,10 +178,7 @@ mod test {
 
     #[test]
     fn test_matrix_to_vec() {
-        let _box = na::DMatrix::from_row_slice(2, 4, &[
-            1., 2., 3., 4.,
-            5., 6., 7., 8.,
-        ]);
+        let _box = na::DMatrix::from_row_slice(2, 4, &[1., 2., 3., 4., 5., 6., 7., 8.]);
         let actual = matrix_to_vec(&_box);
 
         assert!(actual == vec![1., 2., 3., 4., 5., 6., 7., 8.]);
@@ -174,10 +186,7 @@ mod test {
 
     #[test]
     fn test_matrix_split() {
-        let _box = na::DMatrix::from_row_slice(2, 4, &[
-            1., 2., 3., 4.,
-            5., 6., 7., 8.,
-        ]);
+        let _box = na::DMatrix::from_row_slice(2, 4, &[1., 2., 3., 4., 5., 6., 7., 8.]);
 
         let actual = matrix_split(&_box, 4);
         let expect = vec![
@@ -192,17 +201,11 @@ mod test {
 
     #[test]
     fn test_matrix_maximum() {
-        let a = na::DMatrix::from_row_slice(2, 4, &[
-            1., 2., 3., 4.,
-            5., 6., 7., 8.,
-        ]);
+        let a = na::DMatrix::from_row_slice(2, 4, &[1., 2., 3., 4., 5., 6., 7., 8.]);
         let b = na::DMatrix::from_row_slice(1, 4, &[0., 1., 9., 10.]);
 
         let actual = matrix_maximum(&a, &b);
-        let expect = na::DMatrix::from_row_slice(2, 4, &[
-            1., 2., 9., 10.,
-            5., 6., 9., 10.,
-        ]);
+        let expect = na::DMatrix::from_row_slice(2, 4, &[1., 2., 9., 10., 5., 6., 9., 10.]);
 
         assert!(actual == expect);
 

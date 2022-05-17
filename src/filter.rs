@@ -1,14 +1,13 @@
+use crate::matrix::*;
 /**
  * Refer: https://github.com/MichaelMauderer/filter-rs
  */
 use nalgebra::{DMatrix, RealField};
 use std::ops::Mul;
-use crate::matrix::*;
 
 #[allow(non_snake_case)]
 #[derive(Debug)]
-pub struct KalmanFilter
-{
+pub struct KalmanFilter {
     pub dim_x: usize,
     pub dim_z: usize,
     pub dim_u: usize,
@@ -35,7 +34,6 @@ pub struct KalmanFilter
 #[allow(non_snake_case)]
 impl KalmanFilter {
     pub fn new(dim_x: usize, dim_z: usize, dim_u: usize) -> Self {
-
         let x = DMatrix::<f64>::from_element(1, dim_x, 0.0);
         let P = DMatrix::<f64>::identity(dim_x, dim_x);
         let Q = DMatrix::<f64>::identity(dim_x, dim_x);
@@ -82,9 +80,11 @@ impl KalmanFilter {
         }
     }
 
-    pub fn predict(&mut self,
+    pub fn predict(
+        &mut self,
         u: Option<&DMatrix<f64>>,
-        B: Option<&DMatrix<f64>>, F: Option<&DMatrix<f64>>,
+        B: Option<&DMatrix<f64>>,
+        F: Option<&DMatrix<f64>>,
         Q: Option<&DMatrix<f64>>,
     ) {
         let B = if B.is_some() { B } else { self.B.as_ref() };
@@ -117,8 +117,11 @@ impl KalmanFilter {
         self.K = matrix_dot(&PHT, &self.SI);
         self.x = matrix_add(&self.x, &matrix_dot(&self.K, &self.y.clone()));
 
-        let I_KH = matrix_sub(&DMatrix::identity(self.dim_x, self.dim_x), &matrix_dot(&self.K, &H));
-        
+        let I_KH = matrix_sub(
+            &DMatrix::identity(self.dim_x, self.dim_x),
+            &matrix_dot(&self.K, &H),
+        );
+
         let p1 = matrix_dot(&matrix_dot(&I_KH.clone(), &self.P), &I_KH.transpose());
         let p2 = matrix_dot(&matrix_dot(&self.K.clone(), &R), &self.K.transpose());
 
@@ -151,7 +154,7 @@ impl KalmanFilter {
         self.P_post = self.P.clone();
     }
 
-    pub fn get_prediction(&self, u: Option<&DMatrix<f64>>,) -> (DMatrix<f64>, DMatrix<f64>) {
+    pub fn get_prediction(&self, u: Option<&DMatrix<f64>>) -> (DMatrix<f64>, DMatrix<f64>) {
         let Q = &self.Q;
         let F = &self.F;
         let P = &self.P;
@@ -208,7 +211,7 @@ impl KalmanFilter {
 mod tests {
     use assert_approx_eq::assert_approx_eq;
     use nalgebra::base::Vector1;
-    use nalgebra::{U1, U2, Vector2, Matrix2, Matrix1, dmatrix};
+    use nalgebra::{dmatrix, Matrix1, Matrix2, Vector2, U1, U2};
 
     use super::*;
 

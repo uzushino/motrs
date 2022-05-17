@@ -1,24 +1,38 @@
 // Refer: https://github.com/nwtnni/hungarian
 
-use std::iter::Sum;
-use std::fmt::Debug;
 use fixedbitset::FixedBitSet;
+use nalgebra as na;
 use num_traits::NumAssign;
 use num_traits::{Bounded, Signed, Zero};
-use nalgebra as na;
+use std::fmt::Debug;
+use std::iter::Sum;
 
 macro_rules! on {
-    ($s:expr, $i:expr) => ($s.contains($i))
+    ($s:expr, $i:expr) => {
+        $s.contains($i)
+    };
 }
 
 macro_rules! off {
-    ($s:expr, $i:expr) => (!$s.contains($i))
+    ($s:expr, $i:expr) => {
+        !$s.contains($i)
+    };
 }
 
-pub fn minimize<N: 'static + NumAssign + Bounded + Sum<N> + Zero + Signed + Ord + Copy + Debug>(matrix: &[N], height: usize, width: usize) -> Vec<Option<usize>> {
-    if height == 0 || width == 0 { return Vec::new() }
+pub fn minimize<N: 'static + NumAssign + Bounded + Sum<N> + Zero + Signed + Ord + Copy + Debug>(
+    matrix: &[N],
+    height: usize,
+    width: usize,
+) -> Vec<Option<usize>> {
+    if height == 0 || width == 0 {
+        return Vec::new();
+    }
     let rotated = width < height;
-    let (w, h) = if rotated { (height, width) } else { (width, height) };
+    let (w, h) = if rotated {
+        (height, width)
+    } else {
+        (width, height)
+    };
     let mut m = na::DMatrix::zeros(h, w);
 
     for i in 0..height {
@@ -54,12 +68,14 @@ pub fn minimize<N: 'static + NumAssign + Bounded + Sum<N> + Zero + Signed + Ord 
 
     for i in 0..h {
         for j in 0..w {
-            if on!(col_cover, j) { continue }
+            if on!(col_cover, j) {
+                continue;
+            }
 
             if m[(i, j)].is_zero() {
                 stars[(i, j)] = true;
                 col_cover.insert(j);
-                break
+                break;
             }
         }
     }
@@ -69,9 +85,7 @@ pub fn minimize<N: 'static + NumAssign + Bounded + Sum<N> + Zero + Signed + Ord 
     let mut verify = true;
 
     loop {
-
         if verify {
-
             //********************************************//
             //                                            //
             //                   Step 3                   //
@@ -80,25 +94,30 @@ pub fn minimize<N: 'static + NumAssign + Bounded + Sum<N> + Zero + Signed + Ord 
 
             for c in 0..stars.ncols() {
                 let col = stars.column(c);
-                if col.iter().any(|&s| s) { col_cover.insert(c) }
+                if col.iter().any(|&s| s) {
+                    col_cover.insert(c)
+                }
             }
 
             if col_cover.count_ones(..) == h {
-                let assign =
-                    (0..stars.nrows()).map(|_r| {
-                        let r = stars.row(_r);
+                let assign = (0..stars.nrows()).map(|_r| {
+                    let r = stars.row(_r);
 
-                        r.iter().enumerate().find(|&(_, &v)| v)
-                            .map(|(i, _)| i)
-                            .unwrap()
+                    r.iter()
+                        .enumerate()
+                        .find(|&(_, &v)| v)
+                        .map(|(i, _)| i)
+                        .unwrap()
                 });
 
                 if rotated {
                     let mut result = vec![None; w];
-                    assign.enumerate().for_each(|(i, j)| result[j] = Some(h - i - 1));
-                    return result
+                    assign
+                        .enumerate()
+                        .for_each(|(i, j)| result[j] = Some(h - i - 1));
+                    return result;
                 } else {
-                    return assign.map(|j| Some(j)).collect()
+                    return assign.map(|j| Some(j)).collect();
                 }
             }
         }
@@ -111,10 +130,14 @@ pub fn minimize<N: 'static + NumAssign + Bounded + Sum<N> + Zero + Signed + Ord 
 
         let mut uncovered = None;
 
-        'outer : for i in 0..h {
-            if on!(row_cover, i) { continue }
+        'outer: for i in 0..h {
+            if on!(row_cover, i) {
+                continue;
+            }
             for j in 0..w {
-                if on!(col_cover, j) { continue }
+                if on!(col_cover, j) {
+                    continue;
+                }
                 if m[(i, j)].is_zero() {
                     uncovered = Some((i, j));
                     primes[(i, j)] = true;
@@ -132,9 +155,13 @@ pub fn minimize<N: 'static + NumAssign + Bounded + Sum<N> + Zero + Signed + Ord 
             let mut min = N::max_value();
 
             for i in 0..h {
-                if on!(row_cover, i) { continue }
+                if on!(row_cover, i) {
+                    continue;
+                }
                 for j in 0..w {
-                    if on!(col_cover, j) { continue }
+                    if on!(col_cover, j) {
+                        continue;
+                    }
                     let value = m[(i, j)];
                     min = if value < min { value } else { min };
                 }
@@ -149,7 +176,7 @@ pub fn minimize<N: 'static + NumAssign + Bounded + Sum<N> + Zero + Signed + Ord 
             }
 
             verify = false;
-            continue
+            continue;
         }
 
         let (i, j) = uncovered.unwrap();
@@ -157,7 +184,7 @@ pub fn minimize<N: 'static + NumAssign + Bounded + Sum<N> + Zero + Signed + Ord 
             row_cover.insert(i);
             col_cover.set(j, false);
             verify = false;
-            continue
+            continue;
         }
 
         //********************************************//
@@ -171,7 +198,9 @@ pub fn minimize<N: 'static + NumAssign + Bounded + Sum<N> + Zero + Signed + Ord 
             let (_, j) = path[path.len() - 1];
             let next_star = (0..h).find(|&i| stars[(i, j)]);
 
-            if let None = next_star { break }
+            if let None = next_star {
+                break;
+            }
             let i = next_star.unwrap();
             path.push((i, j));
 

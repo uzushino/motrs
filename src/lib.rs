@@ -10,7 +10,13 @@ mod metrics;
 
 use crate::tracker::Track;
 
-pub fn Q_discrete_white_noise(dim: usize, dt: f64, var: f64, block_size: usize, order_by_dim: bool) -> na::DMatrix<f64> {
+pub fn Q_discrete_white_noise(
+    dim: usize,
+    dt: f64,
+    var: f64,
+    block_size: usize,
+    order_by_dim: bool,
+) -> na::DMatrix<f64> {
     if !vec![2, 3, 4].contains(&dim) {
         panic!();
     }
@@ -18,19 +24,33 @@ pub fn Q_discrete_white_noise(dim: usize, dt: f64, var: f64, block_size: usize, 
     let Q = match dim {
         2 => vec![
             vec![(0.25 * dt).powf(4.), (0.5 * dt).powf(3.)],
-            vec![(0.5  * dt).powf(3.),         dt.powf(2.)],
+            vec![(0.5 * dt).powf(3.), dt.powf(2.)],
         ],
         3 => vec![
-            vec![(0.25 * dt).powf(4.), (0.5 * dt).powf(3.), (0.5 * dt).powf(2.0)],
-            vec![(0.5  * dt).powf(3.),         dt.powf(2.),                   dt],
-            vec![(0.5  * dt).powf(2.),                  dt,                   1.],
+            vec![
+                (0.25 * dt).powf(4.),
+                (0.5 * dt).powf(3.),
+                (0.5 * dt).powf(2.0),
+            ],
+            vec![(0.5 * dt).powf(3.), dt.powf(2.), dt],
+            vec![(0.5 * dt).powf(2.), dt, 1.],
         ],
         _ => vec![
-            vec![dt.powf(6.)/36., dt.powf(5.)/12., dt.powf(4.)/6., dt.powf(3.)/6.],
-            vec![dt.powf(5.)/12.,  dt.powf(4.)/4., dt.powf(3.)/2., dt.powf(2.)/2.],
-            vec![ dt.powf(4.)/6.,  dt.powf(3.)/2.,    dt.powf(2.),             dt],
-            vec![ dt.powf(3.)/6.,  dt.powf(2.)/2.,             dt,             1.],
-        ]
+            vec![
+                dt.powf(6.) / 36.,
+                dt.powf(5.) / 12.,
+                dt.powf(4.) / 6.,
+                dt.powf(3.) / 6.,
+            ],
+            vec![
+                dt.powf(5.) / 12.,
+                dt.powf(4.) / 4.,
+                dt.powf(3.) / 2.,
+                dt.powf(2.) / 2.,
+            ],
+            vec![dt.powf(4.) / 6., dt.powf(3.) / 2., dt.powf(2.), dt],
+            vec![dt.powf(3.) / 6., dt.powf(2.) / 2., dt, 1.],
+        ],
     };
 
     order_by_derivative(Q, dim, block_size) * var
@@ -45,7 +65,8 @@ fn order_by_derivative(q: Vec<Vec<f64>>, dim: usize, block_size: usize) -> na::D
         let ix = (i / dim) * block_size;
         let iy = (i % dim) * block_size;
 
-        d.index_mut((ix..(ix+block_size), iy..(iy+block_size))).copy_from(&f);
+        d.index_mut((ix..(ix + block_size), iy..(iy + block_size)))
+            .copy_from(&f);
     }
 
     d
@@ -53,10 +74,15 @@ fn order_by_derivative(q: Vec<Vec<f64>>, dim: usize, block_size: usize) -> na::D
 
 pub fn tracker_to_string(track: Track) -> String {
     let score = if let Some(score) = track.score {
-        score 
-    } else { 
+        score
+    } else {
         -1.
     };
 
-    format!("ID: {} | S: {} | C: {}", track.id, score, track.class_id.unwrap_or_default())
+    format!(
+        "ID: {} | S: {} | C: {}",
+        track.id,
+        score,
+        track.class_id.unwrap_or_default()
+    )
 }

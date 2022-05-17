@@ -6,18 +6,16 @@ use ordered_float::OrderedFloat;
 use crate::assignment::minimize;
 use crate::matrix::*;
 
-pub fn calculate_iou(bboxes1: na::DMatrix<f64>, bboxes2: na::DMatrix<f64>, dim: usize) -> na::DMatrix<f64> {
+pub fn calculate_iou(
+    bboxes1: na::DMatrix<f64>,
+    bboxes2: na::DMatrix<f64>,
+    dim: usize,
+) -> na::DMatrix<f64> {
     let r = bboxes1.nrows();
-    let bboxes1 = bboxes1.reshape_generic(
-        Dynamic::new(r),
-        Dynamic::new(dim * 2)
-    );
+    let bboxes1 = bboxes1.reshape_generic(Dynamic::new(r), Dynamic::new(dim * 2));
 
     let r = bboxes2.nrows();
-    let bboxes2 = bboxes2.reshape_generic(
-        Dynamic::new(r),
-        Dynamic::new(dim * 2)
-    );
+    let bboxes2 = bboxes2.reshape_generic(Dynamic::new(r), Dynamic::new(dim * 2));
 
     let coords_b1 = matrix_split(&bboxes1, 2 * dim);
     let coords_b2 = matrix_split(&bboxes2, 2 * dim);
@@ -46,11 +44,20 @@ pub fn calculate_iou(bboxes1: na::DMatrix<f64>, bboxes2: na::DMatrix<f64>, dim: 
 
         val_inter = matrix_mul(&tmp, &val_inter);
 
-        val_b1 = matrix_mul(&(coords_b1[d + dim].clone() - coords_b1[d].clone()), &val_b1);
-        val_b2 = matrix_mul(&val_b2, &(coords_b2[d + dim].clone() - coords_b2[d].clone()));
+        val_b1 = matrix_mul(
+            &(coords_b1[d + dim].clone() - coords_b1[d].clone()),
+            &val_b1,
+        );
+        val_b2 = matrix_mul(
+            &val_b2,
+            &(coords_b2[d + dim].clone() - coords_b2[d].clone()),
+        );
     }
 
-    let tmp = matrix_sub(&matrix_add(&val_b1, &val_b2.transpose()), &val_inter.clone());
+    let tmp = matrix_sub(
+        &matrix_add(&val_b1, &val_b2.transpose()),
+        &val_inter.clone(),
+    );
     let iou = matrix_div(&val_inter, &matrix_clip(&tmp, Some(0.), None));
 
     iou
@@ -64,13 +71,16 @@ pub fn cosine_distance(vector1: &na::DMatrix<f64>, vector2: &na::DMatrix<f64>) -
     let norm = vector1.dot(vector1) * vector2.dot(vector2);
 
     if norm > 0.0 {
-        return 1. - vector1.dot(vector2) / norm.sqrt()
+        return 1. - vector1.dot(vector2) / norm.sqrt();
     }
 
     0.0
 }
 
-pub fn angular_similarity(vector1: na::DMatrix<f64>, vector2: na::DMatrix<f64>) -> na::DMatrix<f64> {
+pub fn angular_similarity(
+    vector1: na::DMatrix<f64>,
+    vector2: na::DMatrix<f64>,
+) -> na::DMatrix<f64> {
     let mut result = na::DMatrix::zeros(vector1.nrows(), 1);
 
     for row in 0..vector1.nrows() {
@@ -104,15 +114,14 @@ pub fn linear_sum_assignment(mat: &na::DMatrix<f64>) -> (Vec<usize>, Vec<usize>)
         }
     }
 
-
     (row_idxs, col_idxs)
 }
 
 mod test {
     use super::*;
 
-    use nalgebra::dmatrix;
     use approx::assert_relative_eq;
+    use nalgebra::dmatrix;
 
     #[test]
     fn test_iou() {
@@ -120,69 +129,62 @@ mod test {
         let b2 = na::DMatrix::from_row_slice(2, 2, &[10., 21., 30., 40.]);
         let iou_1d = calculate_iou(b1, b2, 1);
 
-        assert_relative_eq!(iou_1d , dmatrix![0.9091, 0.], epsilon = 1e-3f64);
+        assert_relative_eq!(iou_1d, dmatrix![0.9091, 0.], epsilon = 1e-3f64);
 
         let b1 = na::DMatrix::from_row_slice(2, 4, &[20.1, 20.1, 30.1, 30.1, 15., 15., 25., 25.]);
         let b2 = na::DMatrix::from_row_slice(1, 4, &[10., 10., 20., 20.]);
         let iou_2d = calculate_iou(b1, b2, 2);
 
-        assert_relative_eq!(iou_2d , na::DMatrix::from_row_slice(2, 1, &[0., 0.1429]), epsilon = 1e-3f64);
+        assert_relative_eq!(
+            iou_2d,
+            na::DMatrix::from_row_slice(2, 1, &[0., 0.1429]),
+            epsilon = 1e-3f64
+        );
 
         let b1 = na::DMatrix::from_row_slice(1, 6, &[10., 10., 10., 20., 20., 20.]);
-        let b2 = na::DMatrix::from_row_slice(2, 6, &[10., 11., 10.2, 21., 19.9, 20.3, 30., 30., 30., 90., 90., 90.]);
+        let b2 = na::DMatrix::from_row_slice(
+            2,
+            6,
+            &[
+                10., 11., 10.2, 21., 19.9, 20.3, 30., 30., 30., 90., 90., 90.,
+            ],
+        );
         let iou_3d = calculate_iou(b1, b2, 3);
 
-        assert_relative_eq!(iou_3d, na::DMatrix::from_row_slice(1, 2, &[0.7811, 0.]), epsilon = 1e-3f64);
+        assert_relative_eq!(
+            iou_3d,
+            na::DMatrix::from_row_slice(1, 2, &[0.7811, 0.]),
+            epsilon = 1e-3f64
+        );
     }
 
     #[test]
     fn test_anguler_similarity() {
-        let a = na::DMatrix::from_row_slice(2, 3, &[
-            11., 136., 234.,
-            44., 159., 201.,
-        ]);
+        let a = na::DMatrix::from_row_slice(2, 3, &[11., 136., 234., 44., 159., 201.]);
 
-        let b = na::DMatrix::from_row_slice(1, 3, &[
-            30., 160., 208.
-        ]);
+        let b = na::DMatrix::from_row_slice(1, 3, &[30., 160., 208.]);
 
         let actual = angular_similarity(a, b);
-        let expect = na::DMatrix::from_row_slice(2, 1, &[
-                0.99452275, 0.99916559
-        ]);
+        let expect = na::DMatrix::from_row_slice(2, 1, &[0.99452275, 0.99916559]);
 
         assert_relative_eq!(expect, actual, epsilon = 1e-3f64);
     }
 
     #[test]
     fn test_linear_sum_assignment() {
-        let a = na::DMatrix::from_row_slice(3, 3, &[
-            4., 1., 3.,
-            2., 0., 5.,
-            3., 2., 2.,
-        ]);
+        let a = na::DMatrix::from_row_slice(3, 3, &[4., 1., 3., 2., 0., 5., 3., 2., 2.]);
 
         assert!(linear_sum_assignment(&a) == (vec![0, 1, 2], vec![1, 0, 2]));
 
-        let a = na::DMatrix::from_row_slice(2, 1, &[
-            2.,
-            1.
-        ]);
+        let a = na::DMatrix::from_row_slice(2, 1, &[2., 1.]);
 
         assert!(linear_sum_assignment(&a) == (vec![1], vec![0]));
 
-        let a = na::DMatrix::from_row_slice(3, 2, &[
-            2., 3.,
-            4., 5.,
-            1., 0.
-        ]);
+        let a = na::DMatrix::from_row_slice(3, 2, &[2., 3., 4., 5., 1., 0.]);
 
         assert!(linear_sum_assignment(&a) == (vec![0, 2], vec![0, 1]));
 
-        let a = na::DMatrix::from_row_slice(2, 1, &[
-            -0.,
-            -0.806
-        ]);
+        let a = na::DMatrix::from_row_slice(2, 1, &[-0., -0.806]);
 
         assert!(linear_sum_assignment(&a) == (vec![1], vec![0]));
     }

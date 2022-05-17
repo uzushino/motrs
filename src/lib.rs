@@ -1,14 +1,17 @@
-use nalgebra::base::DMatrix;
+use nalgebra as na;
 
-mod model;
-mod tracker;
+pub mod model;
+pub mod tracker;
+
+mod assignment;
 mod filter;
 mod matrix;
 mod metrics;
-mod testing;
 
-pub fn Q_discrete_white_noise(dim: usize, dt: f64, var: f64, block_size: usize, order_by_dim: bool) -> DMatrix<f64> {
-    if vec![2, 3, 4].contains(&dim) {
+use crate::tracker::Track;
+
+pub fn Q_discrete_white_noise(dim: usize, dt: f64, var: f64, block_size: usize, order_by_dim: bool) -> na::DMatrix<f64> {
+    if !vec![2, 3, 4].contains(&dim) {
         panic!();
     }
 
@@ -33,12 +36,12 @@ pub fn Q_discrete_white_noise(dim: usize, dt: f64, var: f64, block_size: usize, 
     order_by_derivative(Q, dim, block_size) * var
 }
 
-fn order_by_derivative(q: Vec<Vec<f64>>, dim: usize, block_size: usize) -> DMatrix<f64> {
+fn order_by_derivative(q: Vec<Vec<f64>>, dim: usize, block_size: usize) -> na::DMatrix<f64> {
     let n = dim * block_size;
-    let mut d = DMatrix::<f64>::zeros(n, n);
+    let mut d = na::DMatrix::<f64>::zeros(n, n);
 
     for (i, x) in q.iter().flatten().enumerate() {
-        let f = DMatrix::identity(block_size, block_size) * *x;
+        let f = na::DMatrix::identity(block_size, block_size) * *x;
         let ix = (i / dim) * block_size;
         let iy = (i % dim) * block_size;
 
@@ -46,4 +49,14 @@ fn order_by_derivative(q: Vec<Vec<f64>>, dim: usize, block_size: usize) -> DMatr
     }
 
     d
+}
+
+pub fn tracker_to_string(track: Track) -> String {
+    let score = if let Some(score) = track.score {
+        score 
+    } else { 
+        -1.
+    };
+
+    format!("ID: {} | S: {} | C: {}", track.id, score, track.class_id.unwrap_or_default())
 }

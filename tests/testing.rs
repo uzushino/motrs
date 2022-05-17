@@ -1,12 +1,12 @@
-use genawaiter::{rc::gen, yield_};
-use genawaiter::sync::{Co, Gen, GenBoxed};
-
-use rand::{thread_rng, Rng};
+use csv;
+use rand::Rng;
 use rand::distributions::{ Uniform };
 use rand_distr::{Normal, Distribution};
 
-use nalgebra::{ DMatrix, dmatrix };
-use crate::tracker::Detection;
+use genawaiter::sync::{Gen, GenBoxed};
+use nalgebra as na;
+
+use motrs::tracker::Detection;
 
 const CANVAS_SIZE: i64 = 1000;
 
@@ -134,11 +134,11 @@ impl Actor {
             self.disappear_steps -= 1;
         }
 
-        let det_gt = Detection { 
-            _box: Some(DMatrix::from_row_slice(1, 4, &box_gt)),
+        let det_gt = Detection {
+            _box: Some(na::DMatrix::from_row_slice(1, 4, &box_gt)),
             score: 1.,
             class_id: self.class_id,
-            feature: Some(DMatrix::from_fn(1, 3, |r, c| self.color[c] as f64)),
+            feature: Some(na::DMatrix::from_fn(1, 3, |r, c| self.color[c] as f64)),
         };
 
         let feature_pred = self.color
@@ -146,11 +146,20 @@ impl Actor {
             .map(|v| rand_guass(&mut rng, 0., 5.) + (*v as f64))
             .collect::<Vec<_>>();
 
-        let det_pred = Detection {
-            _box: Some(DMatrix::from_row_slice(1, 3, box_pred.unwrap().as_slice())),
-            score: rand_uniform(&mut rng, 0.5, 1.),
-            class_id: std::cmp::max(0, self.class_id + rand_int(&mut rng, -1, 1)),
-            feature: Some(DMatrix::from_row_slice(1, 3, feature_pred.as_slice())),
+        let det_pred = if box_pred.is_some() {
+            Detection {
+                _box: Some(na::DMatrix::from_row_slice(1, 4, box_pred.unwrap().as_slice())),
+                score: rand_uniform(&mut rng, 0.5, 1.),
+                class_id: std::cmp::max(0, self.class_id + rand_int(&mut rng, -1, 1)),
+                feature: Some(na::DMatrix::from_row_slice(1, 3, feature_pred.as_slice())),
+            }
+        } else {
+            Detection {
+                _box: None,
+                score: rand_uniform(&mut rng, 0.5, 1.),
+                class_id: std::cmp::max(0, self.class_id + rand_int(&mut rng, -1, 1)),
+                feature: Some(na::DMatrix::from_row_slice(1, 3, feature_pred.as_slice())),
+            }
         };
 
         (det_gt, det_pred)
@@ -179,14 +188,75 @@ pub fn data_generator(num_steps: i64, num_objects: i64, max_omega: f64, miss_pro
             for step in 0..num_steps {
                 let mut dets_gt = vec![];
                 let mut dets_pred = vec![];
-                
+
                 for mut actor in actors.iter_mut() {
-                    let (det_gt, det_pred) = (&mut actor).detections(&step);
-                    
+                    let (mut det_gt, mut det_pred) = (&mut actor).detections(&step);
+
                     dets_gt.push(det_gt);
                     dets_pred.push(det_pred);
                 }
-                
+
+                co.yield_((dets_gt, dets_pred)).await;
+            }
+        }
+    })
+}
+
+pub fn data_generator_file(gt: &std::path::Path, pred: &std::path::Path)  -> GenBoxed<(Vec<Detection>, Vec<Detection>)> {
+    let mut rdr_gt= csv::Reader::from_path(gt.as_os_str()).unwrap();
+    let mut rdr_pred = csv::Reader::from_path(pred.as_os_str()).unwrap();
+
+    Gen::new_boxed(|co| {
+        async move {
+            let mut iter1 = rdr_gt.deserialize::<(Option<f64>, Option<f64>, Option<f64>, Option<f64>, f64, f64, f64, i64, f64)>();
+            let mut iter2 = rdr_pred.deserialize::<(Option<f64>, Option<f64>, Option<f64>, Option<f64>, f64, f64, f64, f64, f64)>();
+
+            for j in 0..2000 {
+                let mut dets_gt = vec![];
+                let mut dets_pred = vec![];
+
+                for i in 0..2 {
+                    let record = iter1.next();
+                    if let Some(r) = record {
+                        let r = r.unwrap();
+                        if r.0.is_some() {
+                            dets_gt.push(Detection {
+                                _box: Some(na::DMatrix::from_row_slice(1, 4, &[r.0.unwrap(), r.1.unwrap(), r.2.unwrap(), r.3.unwrap()])),
+                                score: r.8,
+                                class_id: r.7,
+                                feature: Some(na::DMatrix::from_row_slice(1, 3, &[r.4, r.5, r.6])),
+                            });
+                        } else {
+                            dets_gt.push(Detection {
+                                _box: None,
+                                score: r.8,
+                                class_id: r.7,
+                                feature: Some(na::DMatrix::from_row_slice(1, 3, &[r.4, r.5, r.6])),
+                            });
+                        }
+                    }
+
+                    let record = iter2.next();
+                    if let Some(r) = record {
+                        let r = r.unwrap();
+                        if r.0.is_some() {
+                            dets_pred.push(Detection {
+                                _box: Some(na::DMatrix::from_row_slice(1, 4, &[r.0.unwrap(), r.1.unwrap(), r.2.unwrap(), r.3.unwrap()])),
+                                score: r.8,
+                                class_id: r.7 as i64,
+                                feature: Some(na::DMatrix::from_row_slice(1, 3, &[r.4, r.5, r.6])),
+                            });
+                        } else {
+                            dets_pred.push(Detection {
+                                _box: None,
+                                score: r.8,
+                                class_id: r.7 as i64,
+                                feature: Some(na::DMatrix::from_row_slice(1, 3, &[r.4, r.5, r.6])),
+                            });
+                        }
+                    }
+                }
+
                 co.yield_((dets_gt, dets_pred)).await;
             }
         }

@@ -2,51 +2,54 @@
  * Refer: https://github.com/MichaelMauderer/filter-rs
  */
 use nalgebra::{DMatrix, RealField};
+use std::ops::Mul;
+use crate::matrix::*;
 
 #[allow(non_snake_case)]
 #[derive(Debug)]
-pub struct KalmanFilter<F: RealField>
+pub struct KalmanFilter
 {
     pub dim_x: usize,
     pub dim_z: usize,
     pub dim_u: usize,
 
-    pub x: DMatrix<F>,
-    pub P: DMatrix<F>,
-    pub x_prior: DMatrix<F>,
-    pub P_prior: DMatrix<F>,
-    pub x_post: DMatrix<F>,
-    pub P_post: DMatrix<F>,
-    pub z: Option<DMatrix<F>>,
-    pub R: DMatrix<F>,
-    pub Q: DMatrix<F>,
-    pub B: Option<DMatrix<F>>,
-    pub F: DMatrix<F>,
-    pub H: DMatrix<F>,
-    pub y: DMatrix<F>,
-    pub K: DMatrix<F>,
-    pub S: DMatrix<F>,
-    pub SI: DMatrix<F>,
-    pub alpha_sq: F,
+    pub x: DMatrix<f64>,
+    pub P: DMatrix<f64>,
+    pub x_prior: DMatrix<f64>,
+    pub P_prior: DMatrix<f64>,
+    pub x_post: DMatrix<f64>,
+    pub P_post: DMatrix<f64>,
+    pub z: Option<DMatrix<f64>>,
+    pub R: DMatrix<f64>,
+    pub Q: DMatrix<f64>,
+    pub B: Option<DMatrix<f64>>,
+    pub F: DMatrix<f64>,
+    pub H: DMatrix<f64>,
+    pub y: DMatrix<f64>,
+    pub K: DMatrix<f64>,
+    pub S: DMatrix<f64>,
+    pub SI: DMatrix<f64>,
+    pub alpha_sq: f64,
 }
 
 #[allow(non_snake_case)]
-impl<F> KalmanFilter<F> where F: RealField + Copy {
+impl KalmanFilter {
     pub fn new(dim_x: usize, dim_z: usize, dim_u: usize) -> Self {
-        let x = DMatrix::<F>::from_element(1, dim_x, F::zero());
-        let P = DMatrix::<F>::identity(dim_x, dim_x);
-        let Q = DMatrix::<F>::identity(dim_x, dim_x);
-        let F = DMatrix::<F>::identity(dim_x, dim_x);
-        let H = DMatrix::<F>::from_element(dim_z, dim_x, F::zero());
-        let R = DMatrix::<F>::identity(dim_z, dim_z);
-        let alpha_sq = F::one();
+
+        let x = DMatrix::<f64>::from_element(1, dim_x, 0.0);
+        let P = DMatrix::<f64>::identity(dim_x, dim_x);
+        let Q = DMatrix::<f64>::identity(dim_x, dim_x);
+        let F = DMatrix::<f64>::identity(dim_x, dim_x);
+        let H = DMatrix::<f64>::from_element(dim_z, dim_x, 0.0);
+        let R = DMatrix::<f64>::identity(dim_z, dim_z);
+        let alpha_sq = 1.0;
 
         let z = None;
 
-        let K = DMatrix::<F>::from_element(dim_x, dim_z, F::zero());
-        let y = DMatrix::<F>::from_element(1, dim_z, F::one());
-        let S = DMatrix::<F>::from_element(dim_z, dim_z, F::zero());
-        let SI = DMatrix::<F>::from_element(dim_z, dim_z, F::zero());
+        let K = DMatrix::<f64>::from_element(dim_x, dim_z, 0.0);
+        let y = DMatrix::<f64>::from_element(1, dim_z, 1.0);
+        let S = DMatrix::<f64>::from_element(dim_z, dim_z, 0.0);
+        let SI = DMatrix::<f64>::from_element(dim_z, dim_z, 0.0);
 
         let x_prior = x.clone();
         let P_prior = P.clone();
@@ -80,54 +83,53 @@ impl<F> KalmanFilter<F> where F: RealField + Copy {
     }
 
     pub fn predict(&mut self,
-        u: Option<&DMatrix<F>>,
-        B: Option<&DMatrix<F>>, F: Option<&DMatrix<F>>,
-        Q: Option<&DMatrix<F>>,
+        u: Option<&DMatrix<f64>>,
+        B: Option<&DMatrix<f64>>, F: Option<&DMatrix<f64>>,
+        Q: Option<&DMatrix<f64>>,
     ) {
         let B = if B.is_some() { B } else { self.B.as_ref() };
         let F = F.unwrap_or(&self.F);
         let Q = Q.unwrap_or(&self.Q);
 
         if B.is_some() && u.is_some() {
-            self.x = F * self.x.clone() + B.unwrap() * u.unwrap();
+            self.x = matrix_dot(&F, &self.x.clone()) + matrix_dot(&B.unwrap(), &u.unwrap());
         } else {
-            self.x = F * self.x.clone();
+            self.x = matrix_dot(&F, &self.x.clone());
         }
 
-        self.P = ((F * self.P.clone()) * F.transpose()) * self.alpha_sq + Q;
+        self.P = matrix_dot(&matrix_dot(&F, &self.P.clone()), &F.transpose()) * self.alpha_sq + Q;
 
         self.x_prior = self.x.clone();
         self.P_prior = self.P.clone();
     }
 
     /// Add a new measurement (z) to the Kalman filter.
-    pub fn update(&mut self, z: &DMatrix<F>, R: Option<&DMatrix<F>>, H: Option<&DMatrix<F>>) {
+    pub fn update(&mut self, z: &DMatrix<f64>, R: Option<&DMatrix<f64>>, H: Option<&DMatrix<f64>>) {
         let R = R.unwrap_or(&self.R);
         let H = H.unwrap_or(&self.H);
 
-        self.y = z - H * &self.x;
+        self.y = z - matrix_dot(&H, &self.x.clone());
 
-        let PHT = self.P.clone() * H.transpose();
-        self.S = H * &PHT + R;
+        let PHT = matrix_dot(&self.P.clone(), &H.transpose());
 
-        self.SI = self.S.clone().try_inverse().unwrap();
+        self.S = matrix_dot(&H, &PHT) + R;
+        self.SI = self.S.clone().pseudo_inverse(0.0001).unwrap();
+        self.K = matrix_dot(&PHT, &self.SI);
+        self.x = matrix_add(&self.x, &matrix_dot(&self.K, &self.y.clone()));
 
-        self.K = PHT * &self.SI;
+        let I_KH = matrix_sub(&DMatrix::identity(self.dim_x, self.dim_x), &matrix_dot(&self.K, &H));
+        
+        let p1 = matrix_dot(&matrix_dot(&I_KH.clone(), &self.P), &I_KH.transpose());
+        let p2 = matrix_dot(&matrix_dot(&self.K.clone(), &R), &self.K.transpose());
 
-        self.x = &self.x + &self.K * &self.y;
-
-        let I_KH = DMatrix::identity(self.dim_x, self.dim_x) - &self.K * H;
-        self.P =
-            ((I_KH.clone() * &self.P) * I_KH.transpose()) + ((&self.K * R) * &self.K.transpose());
+        self.P = p1 + p2;
 
         self.z = Some(z.clone());
         self.x_post = self.x.clone();
         self.P_post = self.P.clone();
     }
 
-    /// Predict state (prior) using the Kalman filter state propagation equations.
-    /// Only x is updated, P is left unchanged.
-    pub fn predict_steadystate(&mut self, u: Option<&DMatrix<F>>, B: Option<&DMatrix<F>>) {
+    pub fn predict_steadystate(&mut self, u: Option<&DMatrix<f64>>, B: Option<&DMatrix<f64>>) {
         let B = if B.is_some() { B } else { self.B.as_ref() };
 
         if B.is_some() && u.is_some() {
@@ -140,9 +142,7 @@ impl<F> KalmanFilter<F> where F: RealField + Copy {
         self.P_prior = self.P.clone();
     }
 
-    /// Add a new measurement (z) to the Kalman filter without recomputing the Kalman gain K,
-    /// the state covariance P, or the system uncertainty S.
-    pub fn update_steadystate(&mut self, z: &DMatrix<F>) {
+    pub fn update_steadystate(&mut self, z: &DMatrix<f64>) {
         self.y = z - &self.H * &self.x;
         self.x = &self.x + &self.K * &self.y;
 
@@ -151,7 +151,7 @@ impl<F> KalmanFilter<F> where F: RealField + Copy {
         self.P_post = self.P.clone();
     }
 
-    pub fn get_prediction(&self, u: Option<&DMatrix<F>>,) -> (DMatrix<F>, DMatrix<F>) {
+    pub fn get_prediction(&self, u: Option<&DMatrix<f64>>,) -> (DMatrix<f64>, DMatrix<f64>) {
         let Q = &self.Q;
         let F = &self.F;
         let P = &self.P;
@@ -171,8 +171,7 @@ impl<F> KalmanFilter<F> where F: RealField + Copy {
         (x, P)
     }
 
-    ///  Computes the new estimate based on measurement `z` and returns it without altering the state of the filter.
-    pub fn get_update(&self, z: &DMatrix<F>) -> (DMatrix<F>, DMatrix<F>) {
+    pub fn get_update(&self, z: &DMatrix<f64>) -> (DMatrix<f64>, DMatrix<f64>) {
         let R = &self.R;
         let H = &self.H;
         let P = &self.P;
@@ -189,20 +188,18 @@ impl<F> KalmanFilter<F> where F: RealField + Copy {
 
         let x = x + K * y;
 
-        let I_KH = &(DMatrix::<F>::identity(self.dim_x, self.dim_x) - (K * H));
+        let I_KH = &(DMatrix::<f64>::identity(self.dim_x, self.dim_x) - (K * H));
 
         let P = ((I_KH * P) * I_KH.transpose()) + ((K * R) * &K.transpose());
 
         (x, P)
     }
 
-    /// Returns the residual for the given measurement (z). Does not alter the state of the filter.
-    pub fn residual_of(&self, z: &DMatrix<F>) -> DMatrix<F> {
+    pub fn residual_of(&self, z: &DMatrix<f64>) -> DMatrix<f64> {
         z - (&self.H * &self.x_prior)
     }
 
-    /// Helper function that converts a state into a measurement.
-    pub fn measurement_of_state(&self, x: &DMatrix<F>) -> DMatrix<F> {
+    pub fn measurement_of_state(&self, x: &DMatrix<f64>) -> DMatrix<f64> {
         &self.H * x
     }
 }
@@ -217,43 +214,16 @@ mod tests {
 
     #[test]
     fn test_univariate_kf_setup() {
-        let mut kf: KalmanFilter<f32> = KalmanFilter::<f32>::new(1, 1, 1);
+        let mut kf: KalmanFilter = KalmanFilter::new(1, 1, 1);
 
         for i in 0..1000 {
-            let zf = i as f32;
+            let zf = i as f64;
             let z = dmatrix!(zf);
 
             kf.predict(None, None, None, None);
             kf.update(&z, None, None);
 
             assert_approx_eq!(zf, kf.z.clone().unwrap()[0]);
-        }
-    }
-
-    #[test]
-    fn test_1d_reference() {
-        let mut kf: KalmanFilter<f64> = KalmanFilter::new(2, 1, 1);
-
-        kf.x = dmatrix!(2.0, 0.0);
-
-        kf.F = DMatrix::from_row_slice(2, 2, &[
-            1.0, 1.0,
-            0.0, 1.0
-        ]);
-        kf.H = DMatrix::from_row_slice(2, 1, &[1.0, 0.0]).transpose();
-        kf.P *= 1000.0;
-        kf.R = DMatrix::from_row_slice(1, 1, &[5.0]).transpose();
-        kf.Q = DMatrix::repeat(2, 2, 0.001).transpose();
-
-        for t in 0..100 {
-            let z = dmatrix!(t as f64);
-
-            kf.update(&z, None, None);
-            kf.predict(None, None, None, None);
-
-            assert_approx_eq!(kf.x[0],
-                              if t == 0 { 0.0099502487 } else { t as f64 + 1.0 },
-                              0.05);
         }
     }
 }

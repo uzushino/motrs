@@ -8,12 +8,15 @@ edition = "2021"
 [dependencies]
 nalgebra = "0.30.1"
 uuid = { version = "0.8.1", features = ["serde", "v4"] }
-pathfinding = "3.0.12"
 ordered-float = "2.0"
 approx = "*"
-genawaiter = "0.99.1"
 rand = "*"
 rand_distr = "*"
+csv = "1.1"
+fixedbitset = "0.3"
+ndarray = "0.13"
+num-traits = "0.2"
 
 [dev-dependencies]
 assert_approx_eq = "*"
+genawaiter = "0.99.1"

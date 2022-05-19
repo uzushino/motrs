@@ -1,0 +1,8 @@
+[package]
+name = "mot"
+edition = "2021"
+publish = false
+
+[dependencies]
+motrs = "../../"
+iced = { version = "0.4", features = ["canvas", "tokio", "debug", "image"] }

@@ -2,7 +2,8 @@
 name = "mot"
 edition = "2021"
 publish = false
+version = "0.1.0"
 
 [dependencies]
-motrs = "../../"
+motrs = { path = "../.." }
 iced = { version = "0.4", features = ["canvas", "tokio", "debug", "image"] }

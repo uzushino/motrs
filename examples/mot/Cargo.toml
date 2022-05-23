@@ -7,3 +7,7 @@ version = "0.1.0"
 [dependencies]
 motrs = { path = "../.." }
 iced = { version = "0.4", features = ["canvas", "tokio", "debug", "image"] }
+nalgebra = "*"
+genawaiter = "0.99.1"
+rand = "*"
+rand_distr = "*"

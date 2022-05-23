@@ -23,5 +23,5 @@ genawaiter = "0.99.1"
 
 [workspace]
 members = [
-    "examples/mot
+    "examples/mot"
 ]

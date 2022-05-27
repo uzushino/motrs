@@ -7,9 +7,10 @@ version = "0.1.0"
 [dependencies]
 motrs = { path = "../.." }
 
-iced = { version = "0.4", features = ["canvas", "tokio", "debug", "image"] }
+iced = { version = "0.3", features = ["canvas", "tokio", "debug", "image", "async-std"] }
 iced_native = "0.4"
 iced_futures = "0.3"
+async-std = "1.11"
 
 nalgebra = "*"
 genawaiter = "0.99.1"

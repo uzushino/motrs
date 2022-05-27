@@ -1,7 +1,7 @@
 use nalgebra as na;
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
-use std::rc::Rc;
+use std::sync::Arc;
 use std::vec;
 
 use crate::filter::KalmanFilter;
@@ -38,13 +38,13 @@ fn get_kalman_object_tracker(model: &Model, x0: Option<na::DMatrix<f64>>) -> Kal
     tracker
 }
 
-fn exponential_moving_average_fn(gamma: f64) -> Box<dyn Fn(f64, f64) -> f64> {
+fn exponential_moving_average_fn(gamma: f64) -> Box<dyn Fn(f64, f64) -> f64 + Send + Sync> {
     Box::new(move |old, new| -> f64 { gamma * old + (1.0 - gamma) * new })
 }
 
 fn exponential_moving_average_matrix_fn(
     gamma: f64,
-) -> Box<dyn Fn(na::DMatrix<f64>, na::DMatrix<f64>) -> na::DMatrix<f64>> {
+) -> Box<dyn Fn(na::DMatrix<f64>, na::DMatrix<f64>) -> na::DMatrix<f64> + Send + Sync> {
     Box::new(move |old, new| -> na::DMatrix<f64> { gamma * old + (1.0 - gamma) * new })
 }
 
@@ -55,8 +55,8 @@ pub struct SingleObjectTracker {
     staleness: f64,
     max_staleness: f64,
 
-    update_score_fn: Box<dyn Fn(f64, f64) -> f64>,
-    update_feature_fn: Box<dyn Fn(na::DMatrix<f64>, na::DMatrix<f64>) -> na::DMatrix<f64>>,
+    update_score_fn: Box<dyn Fn(f64, f64) -> f64 + Send + Sync>,
+    update_feature_fn: Box<dyn Fn(na::DMatrix<f64>, na::DMatrix<f64>) -> na::DMatrix<f64> + Send + Sync>,
 
     score: Option<f64>,
     pub feature: Option<na::DMatrix<f64>>,
@@ -124,7 +124,7 @@ impl SingleObjectTracker {
             feature,
             class_id,
             class_id_counts,
-            update_score_fn: exponential_moving_average_fn(kwargs.smooth_score_gamma),
+            update_score_fn: exponential_moving_average_fn(kwargs.smooth_score_gamma) ,
             update_feature_fn: exponential_moving_average_matrix_fn(kwargs.smooth_feature_gamma),
         };
 
@@ -195,11 +195,11 @@ impl Tracker for SingleObjectTracker {
 
 #[derive(Clone)]
 pub struct SingleObjectTrackerKwargs {
-    max_staleness: f64,
-    smooth_score_gamma: f64,
-    smooth_feature_gamma: f64,
-    score0: Option<f64>,
-    class_id0: Option<i64>,
+    pub max_staleness: f64,
+    pub smooth_score_gamma: f64,
+    pub smooth_feature_gamma: f64,
+    pub score0: Option<f64>,
+    pub class_id0: Option<i64>,
 }
 
 impl Default for SingleObjectTrackerKwargs {
@@ -330,7 +330,7 @@ impl Tracker for KalmanTracker {
 trait BaseMatchingFunction {
     fn call(
         &self,
-        trackers: &Vec<Rc<Box<dyn Tracker>>>,
+        trackers: &Vec<Arc<Box<dyn Tracker + Send + Sync>>>,
         detections: &Vec<Detection>,
     ) -> na::DMatrix<f64>;
 }
@@ -339,7 +339,7 @@ pub struct IOUAndFeatureMatchingFunction {
     pub min_iou: f64,
     pub multi_match_min_iou: f64,
     pub feature_similarity_fn:
-        Option<Box<dyn FnOnce(Vec<na::DMatrix<f64>>, Vec<na::DMatrix<f64>>) -> f64>>,
+        Option<Box<dyn FnOnce(Vec<na::DMatrix<f64>>, Vec<na::DMatrix<f64>>) -> f64 + Send + Sync>>,
     pub feature_similarity_beta: Option<f64>,
 }
 
@@ -348,7 +348,7 @@ impl IOUAndFeatureMatchingFunction {
         min_iou: f64,
         multi_match_min_iou: f64,
         feature_similarity_fn: Option<
-            Box<dyn FnOnce(Vec<na::DMatrix<f64>>, Vec<na::DMatrix<f64>>) -> f64>,
+            Box<dyn FnOnce(Vec<na::DMatrix<f64>>, Vec<na::DMatrix<f64>>) -> f64 + Send + Sync>,
         >,
         feature_similarity_beta: Option<f64>,
     ) -> Self {
@@ -375,7 +375,7 @@ impl Default for IOUAndFeatureMatchingFunction {
 impl BaseMatchingFunction for IOUAndFeatureMatchingFunction {
     fn call(
         &self,
-        trackers: &Vec<Rc<Box<dyn Tracker>>>,
+        trackers: &Vec<Arc<Box<dyn Tracker + Send + Sync>>>,
         detections: &Vec<Detection>,
     ) -> na::DMatrix<f64> {
         match_by_cost_matrix(
@@ -410,9 +410,9 @@ impl Default for Detection {
 
 #[derive(Clone)]
 pub struct ActiveTracksKwargs {
-    max_staleness_to_positive_ratio: f64,
-    max_staleness: f64,
-    min_steps_alive: i64,
+    pub max_staleness_to_positive_ratio: f64,
+    pub max_staleness: f64,
+    pub min_steps_alive: i64,
 }
 
 impl Default for ActiveTracksKwargs {
@@ -426,7 +426,7 @@ impl Default for ActiveTracksKwargs {
 }
 
 pub struct MultiObjectTracker {
-    pub trackers: Vec<Rc<Box<dyn Tracker>>>,
+    pub trackers: Vec<Arc<Box<dyn Tracker + Send + Sync>>>,
     tracker_kwargs: Option<SingleObjectTrackerKwargs>,
     matching_fn: Option<IOUAndFeatureMatchingFunction>,
     matching_fn_kwargs: HashMap<String, f64>,
@@ -468,7 +468,7 @@ impl MultiObjectTracker {
         x0: Option<na::DMatrix<f64>>,
         box0: Option<na::DMatrix<f64>>,
         det: Detection,
-    ) -> Box<dyn Tracker> {
+    ) -> Box<dyn Tracker + Send + Sync> {
         let mut kwargs = self.tracker_kwargs.clone().unwrap_or_default();
         kwargs.score0 = Some(det.score.clone());
         kwargs.class_id0 = Some(det.class_id);
@@ -478,7 +478,7 @@ impl MultiObjectTracker {
             box0,
             self.model_kwargs.clone(),
             Some(kwargs),
-        ))
+        )) as Box<dyn Tracker + Send + Sync>
     }
 
     pub fn step(&mut self, detections: Vec<Detection>) {
@@ -488,7 +488,7 @@ impl MultiObjectTracker {
             .collect::<Vec<_>>();
 
         for t in self.trackers.iter_mut() {
-            Rc::get_mut(t).map(|t| t._predict());
+            Arc::get_mut(t).map(|t| t._predict());
         }
 
         let matches = self
@@ -504,7 +504,7 @@ impl MultiObjectTracker {
                 let det_idx = matches[(c, 1)];
                 let det = &detections[det_idx as usize];
 
-                Rc::get_mut(&mut self.trackers[track_idx as usize]).map(|t| t.update(det));
+                Arc::get_mut(&mut self.trackers[track_idx as usize]).map(|t| t.update(det));
             }
 
             let assigned_det_idxs = matches.index((.., 1)).data.into_slice().to_vec();
@@ -527,7 +527,7 @@ impl MultiObjectTracker {
             let det = &detections[*det_idx as usize];
             let tracker = self.tracker_clss(None, det._box.clone(), det.clone());
 
-            self.trackers.push(Rc::new(tracker));
+            self.trackers.push(Arc::new(tracker));
         }
 
         self.cleanup_trackers();
@@ -580,7 +580,7 @@ impl MultiObjectTracker {
 }
 
 fn cost_matrix_iou_feature(
-    trackers: &Vec<Rc<Box<dyn Tracker>>>,
+    trackers: &Vec<Arc<Box<dyn Tracker + Send + Sync>>>,
     detections: &Vec<Detection>,
     feature_similarity_fn: Option<
         Box<dyn FnOnce(Vec<na::DMatrix<f64>>, Vec<na::DMatrix<f64>>) -> f64>,
@@ -648,7 +648,7 @@ fn cost_matrix_iou_feature(
 }
 
 pub fn match_by_cost_matrix(
-    trackers: &Vec<Rc<Box<dyn Tracker>>>,
+    trackers: &Vec<Arc<Box<dyn Tracker + Send + Sync>>>,
     detections: &Vec<Detection>,
     min_iou: f64,
     multi_match_min_iou: f64,

@@ -113,20 +113,11 @@ impl Application for ImageViewer {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        iced::Subscription::from_recipe(MyTracker { uuid: "aa".to_string() }).map(|v| Message::Void)
+        iced::Subscription::from_recipe(MyTracker::new()).map(|v| Message::Void)
     }
 
     fn view(&mut self) -> Element<Message> {
         self.viewer.clear();
-
-        let mut gen = data_generator(
-            self.num_steps,
-            20,
-            0.03,
-            0.33,
-            0.0,
-            3.33
-        ).into_iter();
 
         let canvas = canvas::Canvas::new(self)
             .width(Length::Fill)
@@ -158,10 +149,30 @@ use motrs::model::*;
 
 
 pub struct MyTracker {
-    uuid: String
+    uuid: String,
+    dets: Vec<(Vec<Detection>, Vec<Detection>)>,
 }
 
 impl MyTracker {
+    pub fn new() -> Self {
+        let mut dets: Vec<(Vec<Detection>, Vec<Detection>)> = data_generator(
+            200,
+            20,
+            0.03,
+            0.33,
+            0.0,
+            3.33
+        )
+        .into_iter()
+        .take(200)
+        .collect::<Vec<_>>();
+
+        Self {
+            dets,
+            uuid: String::default(),
+        }
+    }
+
     pub fn create() -> MultiObjectTracker {
         let model_spec = ModelPreset::constant_acceleration_and_static_box_size_2d();
         let min_iou = 1. / 24.;
@@ -174,6 +185,7 @@ impl MyTracker {
             feature_similarity_fn,
             feature_similarity_beta,
         );
+
         let tracker = MultiObjectTracker::new(
             0.1,
             model_spec,
@@ -204,14 +216,28 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
     }
 
     fn stream(self: Box<Self>, _input: futures::stream::BoxStream<'static, E>) -> futures::stream::BoxStream<'static, Self::Output> {
-        Box::pin(futures::stream::unfold(MyState::Ready(Self::create()), |state| async move {
+        let dets = self.dets.clone();
+
+        Box::pin(futures::stream::unfold(MyState::Ready(Self::create(), dets), |state| async move {
                 match state {
-                    MyState::Ready(tracker) => {
-                        Some((Progress::Started, MyState::Tracking { total: 1, count: 0, }))
+                    MyState::Ready(tracker, dets) => {
+                        Some((Progress::Started, MyState::Tracking { total: 1, count: 0, tracker: tracker, dets: dets }))
                     }
-                    MyState::Tracking { total, count } => {
+                    MyState::Tracking { total, count, mut tracker, dets} => {
                         if count <= total {
-                            Some((Progress::Advanced(count), MyState::Tracking{ total, count }))
+                            let detections =
+                                dets
+                                .get(0)
+                                .unwrap()
+                                .0
+                                .clone()
+                                .into_iter()
+                                .filter(|d| d._box.is_some())
+                                .collect::<Vec<_>>();
+
+                            tracker.step(detections);
+
+                            Some((Progress::Advanced(count), MyState::Tracking{ total, count: count + 1, tracker, dets }))
                         } else {
                             Some((Progress::Finished, MyState::Finished))
                         }
@@ -234,11 +260,14 @@ pub enum Progress {
     Errored,
 }
 
+
 pub enum MyState {
-    Ready(MultiObjectTracker),
+    Ready(MultiObjectTracker, Vec<(Vec<Detection>, Vec<Detection>)>),
     Tracking {
         total: u64,
         count: u64,
+        tracker: MultiObjectTracker,
+        dets: Vec<(Vec<Detection>, Vec<Detection>)>
     },
     Finished,
 }

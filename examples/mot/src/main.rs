@@ -235,7 +235,7 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
                                 .filter(|d| d._box.is_some())
                                 .collect::<Vec<_>>();
 
-                            tracker.step(detections);
+                            let active_tracks = tracker.step(detections);
 
                             Some((Progress::Advanced(count), MyState::Tracking{ total, count: count + 1, tracker, dets }))
                         } else {

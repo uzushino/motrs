@@ -481,7 +481,7 @@ impl MultiObjectTracker {
         )) as Box<dyn Tracker + Send + Sync>
     }
 
-    pub fn step(&mut self, detections: Vec<Detection>) {
+    pub fn step(&mut self, detections: Vec<Detection>) -> Vec<Track> {
         let detections = detections
             .into_iter()
             .filter(|det| det._box.is_some())
@@ -532,7 +532,7 @@ impl MultiObjectTracker {
 
         self.cleanup_trackers();
 
-        self.active_tracks(self.active_tracks_kwargs.clone());
+        self.active_tracks(self.active_tracks_kwargs.clone())
     }
 
     pub fn cleanup_trackers(&mut self) {

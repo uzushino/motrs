@@ -221,9 +221,9 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
         Box::pin(futures::stream::unfold(MyState::Ready(Self::create(), dets), |state| async move {
                 match state {
                     MyState::Ready(tracker, dets) => {
-                        Some((Progress::Started, MyState::Tracking { total: 1, count: 0, tracker: tracker, dets: dets }))
+                        Some((Progress::Started, MyState::Tracking { total: 1, count: 0, tracker: tracker, dets: dets, active_tracks: Vec::default() }))
                     }
-                    MyState::Tracking { total, count, mut tracker, dets} => {
+                    MyState::Tracking { total, count, mut tracker, dets, active_tracks} => {
                         if count <= total {
                             let detections =
                                 dets
@@ -237,7 +237,7 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
 
                             let active_tracks = tracker.step(detections);
 
-                            Some((Progress::Advanced(count), MyState::Tracking{ total, count: count + 1, tracker, dets }))
+                            Some((Progress::Advanced(count), MyState::Tracking{ total, count: count + 1, tracker, dets, active_tracks }))
                         } else {
                             Some((Progress::Finished, MyState::Finished))
                         }
@@ -267,7 +267,8 @@ pub enum MyState {
         total: u64,
         count: u64,
         tracker: MultiObjectTracker,
-        dets: Vec<(Vec<Detection>, Vec<Detection>)>
+        dets: Vec<(Vec<Detection>, Vec<Detection>)>,
+        active_tracks: Vec<Track>
     },
     Finished,
 }

@@ -15,6 +15,7 @@ macro_rules! array {
     };
 }
 
+#[derive(Debug, Clone)]
 pub struct Track {
     pub id: String,
     pub _box: na::DMatrix<f64>,

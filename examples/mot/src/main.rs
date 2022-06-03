@@ -57,7 +57,7 @@ struct ImageViewer {
 #[derive(Debug, Clone)]
 pub enum Message {
     Void,
-    Tick(Instant),
+    Tracking(Vec<Track>),
 }
 
 impl Application for ImageViewer {
@@ -108,12 +108,26 @@ impl Application for ImageViewer {
         String::from("2d_multi_object_tracking")
     }
 
-    fn update(&mut self, _message: Message, _: &mut Clipboard) -> Command<Message> {
+    fn update(&mut self, message: Message, _: &mut Clipboard) -> Command<Message> {
+        match message {
+            Message::Tracking(active_tracks) => {
+
+            },
+            _ => {}
+        };
+
         Command::none()
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        iced::Subscription::from_recipe(MyTracker::new()).map(|v| Message::Void)
+        iced::Subscription::from_recipe(MyTracker::new()).map(|v| {
+            match v {
+                Progress::Advanced(c, active_tracks) => {
+                    Message::Tracking(active_tracks)
+                },
+                _ => Message::Void
+            }
+        })
     }
 
     fn view(&mut self) -> Element<Message> {
@@ -133,12 +147,25 @@ impl Application for ImageViewer {
 
 impl<Message> canvas::Program<Message> for ImageViewer {
     fn draw(&self, bounds: Rectangle, _cursor: canvas::Cursor) -> Vec<canvas::Geometry> {
-
         let viewer = self.viewer.draw(bounds.size(), |frame| {
             draw_rectangle(frame, (10, 10, 100, 100), (255, 0, 0));
             draw_rectangle(frame, (300, 300, 500, 500), (0, 255, 0));
         });
 
+        vec![viewer]
+    }
+}
+
+struct TrackRectangle {
+    track: Track,
+}
+
+impl <Message> canvas::Program<Message> for TrackRectangle {
+    fn draw(&self, bounds: Rectangle, _cursor: canvas::Cursor) -> Vec<canvas::Geometry> {
+        let viewer = self.viewer.draw(bounds.size(), |frame| {
+            draw_rectangle(frame, (10, 10, 100, 100), (255, 0, 0));
+            draw_rectangle(frame, (300, 300, 500, 500), (0, 255, 0));
+        });
         vec![viewer]
     }
 }
@@ -201,10 +228,8 @@ impl MyTracker {
                 ..Default::default()
             })
         );
-
         tracker
     }
-
 }
 
 impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
@@ -221,9 +246,9 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
         Box::pin(futures::stream::unfold(MyState::Ready(Self::create(), dets), |state| async move {
                 match state {
                     MyState::Ready(tracker, dets) => {
-                        Some((Progress::Started, MyState::Tracking { total: 1, count: 0, tracker: tracker, dets: dets, active_tracks: Vec::default() }))
+                        Some((Progress::Started, MyState::Tracking { total: 1, count: 0, tracker: tracker, dets: dets }))
                     }
-                    MyState::Tracking { total, count, mut tracker, dets, active_tracks} => {
+                    MyState::Tracking { total, count, mut tracker, dets} => {
                         if count <= total {
                             let detections =
                                 dets
@@ -237,7 +262,7 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
 
                             let active_tracks = tracker.step(detections);
 
-                            Some((Progress::Advanced(count), MyState::Tracking{ total, count: count + 1, tracker, dets, active_tracks }))
+                            Some((Progress::Advanced(count, active_tracks), MyState::Tracking{ total, count: count + 1, tracker, dets }))
                         } else {
                             Some((Progress::Finished, MyState::Finished))
                         }
@@ -255,7 +280,7 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
 #[derive(Debug, Clone)]
 pub enum Progress {
     Started,
-    Advanced(u64),
+    Advanced(u64, Vec<Track>),
     Finished,
     Errored,
 }
@@ -268,7 +293,6 @@ pub enum MyState {
         count: u64,
         tracker: MultiObjectTracker,
         dets: Vec<(Vec<Detection>, Vec<Detection>)>,
-        active_tracks: Vec<Track>
     },
     Finished,
 }

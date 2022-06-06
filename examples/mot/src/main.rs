@@ -52,6 +52,7 @@ struct ImageViewer {
     pub num_steps: i64,
     pub tracker: Option<MultiObjectTracker>,
     pub viewer: canvas::Cache,
+    pub active_tracks: Vec<Track>
 }
 
 #[derive(Debug, Clone)]
@@ -99,6 +100,7 @@ impl Application for ImageViewer {
                 num_steps: 0,
                 tracker: Some(tracker),
                 viewer: Default::default(),
+                active_tracks: Vec::default(),
             },
             Command::none(),
         )
@@ -111,7 +113,7 @@ impl Application for ImageViewer {
     fn update(&mut self, message: Message, _: &mut Clipboard) -> Command<Message> {
         match message {
             Message::Tracking(active_tracks) => {
-
+                self.active_tracks = active_tracks;
             },
             _ => {}
         };
@@ -158,13 +160,13 @@ impl<Message> canvas::Program<Message> for ImageViewer {
 
 struct TrackRectangle {
     track: Track,
+    pub viewer: canvas::Cache,
 }
 
 impl <Message> canvas::Program<Message> for TrackRectangle {
     fn draw(&self, bounds: Rectangle, _cursor: canvas::Cursor) -> Vec<canvas::Geometry> {
         let viewer = self.viewer.draw(bounds.size(), |frame| {
-            draw_rectangle(frame, (10, 10, 100, 100), (255, 0, 0));
-            draw_rectangle(frame, (300, 300, 500, 500), (0, 255, 0));
+            draw_rectangle(frame, (self.track._box[0] as usize, self.track._box[1] as usize, self.track._box[2] as usize, self.track._box[3] as usize), (255, 0, 0));
         });
         vec![viewer]
     }

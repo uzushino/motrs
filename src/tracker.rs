@@ -94,8 +94,10 @@ pub trait Tracker {
     fn class_id(&self) -> Option<i64> {
         todo!()
     }
-
     fn model(&self) -> &Model {
+        todo!()
+    }
+    fn stale(&mut self, _rate: Option<f64>) -> f64 {
         todo!()
     }
 }
@@ -191,6 +193,11 @@ impl Tracker for SingleObjectTracker {
     }
     fn class_id(&self) -> Option<i64> {
         self.class_id
+    }
+    fn stale(&mut self, rate: Option<f64>) -> f64 {
+        let rate = rate.unwrap_or(1.0);
+        self.staleness += rate;
+        self.staleness
     }
 }
 
@@ -325,6 +332,9 @@ impl Tracker for KalmanTracker {
     }
     fn model(&self) -> &Model {
         &self.model
+    }
+    fn stale(&mut self, rate: Option<f64>) -> f64 {
+        self._base.stale(rate)
     }
 }
 
@@ -499,18 +509,17 @@ impl MultiObjectTracker {
         self.detections_matched_ids = Vec::with_capacity(detections.len());
         let matches = matches.unwrap();
 
+        for c in 0..matches.nrows() {
+            let track_idx = matches[(c, 0)];
+            let det_idx = matches[(c, 1)];
+            let det = &detections[det_idx as usize];
+
+            Arc::get_mut(&mut self.trackers[track_idx as usize]).map(|t| t.update(det));
+        }
+
         let assigned_det_idxs: HashSet<u64> = if matches.len() > 0 {
-            for c in 0..matches.nrows() {
-                let track_idx = matches[(c, 0)];
-                let det_idx = matches[(c, 1)];
-                let det = &detections[det_idx as usize];
-
-                Arc::get_mut(&mut self.trackers[track_idx as usize]).map(|t| t.update(det));
-            }
-
             let assigned_det_idxs = matches.index((.., 1)).data.into_slice().to_vec();
             let assigned_det_idxs = assigned_det_idxs.iter().map(|v| *v as u64);
-
             HashSet::from_iter(assigned_det_idxs)
         } else {
             HashSet::from_iter(Vec::default())
@@ -527,8 +536,27 @@ impl MultiObjectTracker {
         for det_idx in diff {
             let det = &detections[*det_idx as usize];
             let tracker = self.tracker_clss(None, det._box.clone(), det.clone());
-
             self.trackers.push(Arc::new(tracker));
+        }
+
+        let assigned_track_idxs: HashSet<u64> = if matches.len() > 0 {
+            let assigned_track_idxs = matches.index((.., 0)).data.into_slice().to_vec();
+            let assigned_track_idxs = assigned_track_idxs.iter().map(|v| *v as u64);
+            HashSet::from_iter(assigned_track_idxs)
+        } else {
+            HashSet::from_iter(Vec::default())
+        };
+
+        let track_ranges: HashSet<u64> =
+            HashSet::from_iter((0..self.trackers.len()).into_iter().map(|v| v as u64));
+        let mut diff = track_ranges
+            .difference(&assigned_track_idxs)
+            .into_iter()
+            .collect::<Vec<_>>();
+        diff.sort();
+
+        for track_idx in diff {
+            Arc::get_mut(&mut self.trackers[*track_idx as usize]).map(|it| it.stale(None));
         }
 
         self.cleanup_trackers();
@@ -564,6 +592,8 @@ impl MultiObjectTracker {
                 < kwargs.max_staleness_to_positive_ratio;
             let cond2 = tracker.staleness() < kwargs.max_staleness;
             let cond3 = tracker.steps_alive() >= kwargs.min_steps_alive;
+
+            println!("staleness: {} steps_positive: {}, steps_alive; {}", tracker.staleness(), tracker.steps_positive(), tracker.steps_alive());
 
             if cond1 && cond2 && cond3 {
                 let t = Track {

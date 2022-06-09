@@ -150,8 +150,10 @@ impl Application for ImageViewer {
 impl<Message> canvas::Program<Message> for ImageViewer {
     fn draw(&self, bounds: Rectangle, _cursor: canvas::Cursor) -> Vec<canvas::Geometry> {
         let viewer = self.viewer.draw(bounds.size(), |frame| {
-            draw_rectangle(frame, (10, 10, 100, 100), (255, 0, 0));
-            draw_rectangle(frame, (300, 300, 500, 500), (0, 255, 0));
+            self.active_tracks.iter().for_each(|track| {
+                let rect = (track._box[0] as usize, track._box[1] as usize, track._box[2] as usize, track._box[3] as usize);
+                draw_rectangle(frame, rect, (0, 255, 0));
+            })
         });
 
         vec![viewer]
@@ -184,7 +186,7 @@ pub struct MyTracker {
 
 impl MyTracker {
     pub fn new() -> Self {
-        let mut dets: Vec<(Vec<Detection>, Vec<Detection>)> = data_generator(
+        let dets: Vec<(Vec<Detection>, Vec<Detection>)> = data_generator(
             200,
             20,
             0.03,
@@ -248,7 +250,7 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
         Box::pin(futures::stream::unfold(MyState::Ready(Self::create(), dets), |state| async move {
                 match state {
                     MyState::Ready(tracker, dets) => {
-                        Some((Progress::Started, MyState::Tracking { total: 1, count: 0, tracker: tracker, dets: dets }))
+                        Some((Progress::Started, MyState::Tracking { total: 200, count: 0, tracker: tracker, dets: dets }))
                     }
                     MyState::Tracking { total, count, mut tracker, dets} => {
                         if count <= total {

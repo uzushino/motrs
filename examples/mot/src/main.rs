@@ -13,7 +13,14 @@ use std::time::{Duration, Instant};
 mod testing;
 mod tracker;
 
-use crate::testing::data_generator;
+use crate::testing::{ data_generator, data_generator_file };
+
+pub fn main() -> iced::Result {
+    ImageViewer::run(Settings {
+        antialiasing: true,
+        ..Settings::default()
+    })
+}
 
 fn draw_rectangle(frame: &mut canvas::Frame, _box: (usize, usize, usize, usize), color: (u8, u8, u8)) {
     let top_left = Point {
@@ -36,13 +43,6 @@ fn draw_rectangle(frame: &mut canvas::Frame, _box: (usize, usize, usize, usize),
     frame.with_save(|frame| {
         let path = Path::rectangle(top_left, size);
         frame.stroke(&path, canvas::Stroke::default().with_color(color));
-    })
-}
-
-pub fn main() -> iced::Result {
-    ImageViewer::run(Settings {
-        antialiasing: true,
-        ..Settings::default()
     })
 }
 
@@ -178,7 +178,6 @@ use iced_futures::subscription::Recipe;
 use motrs::tracker::*;
 use motrs::model::*;
 
-
 pub struct MyTracker {
     uuid: String,
     dets: Vec<(Vec<Detection>, Vec<Detection>)>,
@@ -186,13 +185,9 @@ pub struct MyTracker {
 
 impl MyTracker {
     pub fn new() -> Self {
-        let dets: Vec<(Vec<Detection>, Vec<Detection>)> = data_generator(
-            200,
-            20,
-            0.03,
-            0.33,
-            0.0,
-            3.33
+        let dets = data_generator_file(
+            &std::path::Path::new("./gt.csv"),
+            &std::path::Path::new("./pred.csv")
         )
         .into_iter()
         .take(200)
@@ -254,18 +249,24 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
                     }
                     MyState::Tracking { total, count, mut tracker, dets} => {
                         if count <= total {
+                            let c = count as usize;
                             let detections =
                                 dets
-                                .get(0)
-                                .unwrap()
-                                .0
+                                .to_vec()
                                 .clone()
                                 .into_iter()
-                                .filter(|d| d._box.is_some())
+                                .map(|d| d.1)
+                                .flatten()
+                                .collect::<Vec<_>>();
+
+                            let detections = detections[(c * 20)..((c + 1) * 20)]
+                                .to_vec()
+                                .into_iter()
+                                .filter(|v| v._box.is_some())
                                 .collect::<Vec<_>>();
 
                             let active_tracks = tracker.step(detections);
-
+                            //let active_tracks = vec![];
                             Some((Progress::Advanced(count, active_tracks), MyState::Tracking{ total, count: count + 1, tracker, dets }))
                         } else {
                             Some((Progress::Finished, MyState::Finished))

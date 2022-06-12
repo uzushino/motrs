@@ -230,3 +230,93 @@ pub fn data_generator(
         }
     })
 }
+
+pub fn data_generator_file(
+    gt: &std::path::Path,
+    pred: &std::path::Path,
+) -> GenBoxed<(Vec<Detection>, Vec<Detection>)> {
+    let mut rdr_gt = csv::Reader::from_path(gt.as_os_str()).unwrap();
+    let mut rdr_pred = csv::Reader::from_path(pred.as_os_str()).unwrap();
+
+    Gen::new_boxed(|co| async move {
+        let mut iter1 = rdr_gt.deserialize::<(
+            Option<f64>,
+            Option<f64>,
+            Option<f64>,
+            Option<f64>,
+            f64,
+            f64,
+            f64,
+            i64,
+            f64,
+        )>();
+        let mut iter2 = rdr_pred.deserialize::<(
+            Option<f64>,
+            Option<f64>,
+            Option<f64>,
+            Option<f64>,
+            f64,
+            f64,
+            f64,
+            f64,
+            f64,
+        )>();
+
+        for j in 0..2000 {
+            let mut dets_gt = vec![];
+            let mut dets_pred = vec![];
+
+            for i in 0..2 {
+                let record = iter1.next();
+                if let Some(r) = record {
+                    let r = r.unwrap();
+                    if r.0.is_some() {
+                        dets_gt.push(Detection {
+                            _box: Some(na::DMatrix::from_row_slice(
+                                1,
+                                4,
+                                &[r.0.unwrap(), r.1.unwrap(), r.2.unwrap(), r.3.unwrap()],
+                            )),
+                            score: r.8,
+                            class_id: r.7,
+                            feature: Some(na::DMatrix::from_row_slice(1, 3, &[r.4, r.5, r.6])),
+                        });
+                    } else {
+                        dets_gt.push(Detection {
+                            _box: None,
+                            score: r.8,
+                            class_id: r.7,
+                            feature: Some(na::DMatrix::from_row_slice(1, 3, &[r.4, r.5, r.6])),
+                        });
+                    }
+                }
+
+                let record = iter2.next();
+                if let Some(r) = record {
+                    let r = r.unwrap();
+                    if r.0.is_some() {
+                        dets_pred.push(Detection {
+                            _box: Some(na::DMatrix::from_row_slice(
+                                1,
+                                4,
+                                &[r.0.unwrap(), r.1.unwrap(), r.2.unwrap(), r.3.unwrap()],
+                            )),
+                            score: r.8,
+                            class_id: r.7 as i64,
+                            feature: Some(na::DMatrix::from_row_slice(1, 3, &[r.4, r.5, r.6])),
+                        });
+                    } else {
+                        dets_pred.push(Detection {
+                            _box: None,
+                            score: r.8,
+                            class_id: r.7 as i64,
+                            feature: Some(na::DMatrix::from_row_slice(1, 3, &[r.4, r.5, r.6])),
+                        });
+                    }
+                }
+            }
+
+            co.yield_((dets_gt, dets_pred)).await;
+        }
+    })
+}

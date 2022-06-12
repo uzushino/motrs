@@ -641,14 +641,6 @@ impl MultiObjectTracker {
 
         for tracker in self.trackers.iter() {
             let tr = tracker.lock().unwrap();
-
-            if tr.score() == Some(0.5970593224925949) {
-                println!("2 id: {}, staleness: {} steps_positive: {}, steps_alive; {}", tr.id(), tr.staleness(), tr.steps_positive(), tr.steps_alive());
-                dbg!(tr._box());
-                dbg!(tr.score());
-                dbg!(tr.class_id());
-            }
-
             let cond1 = tr.staleness() / (tr.steps_positive() as f64)
                 < kwargs.max_staleness_to_positive_ratio;
             let cond2 = tr.staleness() < kwargs.max_staleness;

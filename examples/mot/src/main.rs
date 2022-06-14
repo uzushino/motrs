@@ -8,12 +8,15 @@ use iced::{
     Container, Element, Length, Row, Settings, Text, canvas::Path, Point, Size, Sandbox,
     canvas, Rectangle, Color, time, Subscription
 };
+use core::num;
 use std::time::{Duration, Instant};
 
 mod testing;
 mod tracker;
 
 use crate::testing::{ data_generator, data_generator_file };
+use std::vec::IntoIter;
+type Generator = GenBoxed<(Vec<Detection>, Vec<Detection>)>;
 
 pub fn main() -> iced::Result {
     ImageViewer::run(Settings {
@@ -22,7 +25,7 @@ pub fn main() -> iced::Result {
     })
 }
 
-fn draw_rectangle(frame: &mut canvas::Frame, _box: (usize, usize, usize, usize), color: (u8, u8, u8)) {
+fn draw_rectangle(frame: &mut canvas::Frame, _box: (usize, usize, usize, usize), color: (u8, u8, u8), fill: bool) {
     let top_left = Point {
         x: _box.0 as f32,
         y: _box.1 as f32,
@@ -42,6 +45,14 @@ fn draw_rectangle(frame: &mut canvas::Frame, _box: (usize, usize, usize, usize),
 
     frame.with_save(|frame| {
         let path = Path::rectangle(top_left, size);
+
+        if fill {
+            frame.fill(&path, canvas::Fill {
+                color,
+                ..Default::default()
+            });
+        }
+
         frame.stroke(&path, canvas::Stroke::default().with_color(color));
     })
 }
@@ -52,13 +63,15 @@ struct ImageViewer {
     pub num_steps: i64,
     pub tracker: Option<MultiObjectTracker>,
     pub viewer: canvas::Cache,
-    pub active_tracks: Vec<Track>
+
+    pub active_tracks: Vec<Track>,
+    pub detections: Vec<Detection>
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
     Void,
-    Tracking(Vec<Track>),
+    Tracking(Vec<Track>, Vec<Detection>),
 }
 
 impl Application for ImageViewer {
@@ -101,6 +114,7 @@ impl Application for ImageViewer {
                 tracker: Some(tracker),
                 viewer: Default::default(),
                 active_tracks: Vec::default(),
+                detections: Vec::default()
             },
             Command::none(),
         )
@@ -112,8 +126,9 @@ impl Application for ImageViewer {
 
     fn update(&mut self, message: Message, _: &mut Clipboard) -> Command<Message> {
         match message {
-            Message::Tracking(active_tracks) => {
+            Message::Tracking(active_tracks, detections) => {
                 self.active_tracks = active_tracks;
+                self.detections = detections;
             },
             _ => {}
         };
@@ -124,8 +139,8 @@ impl Application for ImageViewer {
     fn subscription(&self) -> Subscription<Message> {
         iced::Subscription::from_recipe(MyTracker::new()).map(|v| {
             match v {
-                Progress::Advanced(c, active_tracks) => {
-                    Message::Tracking(active_tracks)
+                Progress::Advanced(c, active_tracks, detections) => {
+                    Message::Tracking(active_tracks, detections)
                 },
                 _ => Message::Void
             }
@@ -152,24 +167,17 @@ impl<Message> canvas::Program<Message> for ImageViewer {
         let viewer = self.viewer.draw(bounds.size(), |frame| {
             self.active_tracks.iter().for_each(|track| {
                 let rect = (track._box[0] as usize, track._box[1] as usize, track._box[2] as usize, track._box[3] as usize);
-                draw_rectangle(frame, rect, (0, 255, 0));
-            })
+                draw_rectangle(frame, rect, (0, 255, 0), false);
+            });
+
+            self.detections.iter().for_each(|det|  {
+                let b = det._box.clone().unwrap();
+                let f = det.feature.clone().unwrap();
+                let rect = (b[0] as usize, b[1] as usize, b[2] as usize, b[3] as usize);
+                draw_rectangle(frame, rect, (f[0] as u8, f[1] as u8, f[2] as u8), true);
+            });
         });
 
-        vec![viewer]
-    }
-}
-
-struct TrackRectangle {
-    track: Track,
-    pub viewer: canvas::Cache,
-}
-
-impl <Message> canvas::Program<Message> for TrackRectangle {
-    fn draw(&self, bounds: Rectangle, _cursor: canvas::Cursor) -> Vec<canvas::Geometry> {
-        let viewer = self.viewer.draw(bounds.size(), |frame| {
-            draw_rectangle(frame, (self.track._box[0] as usize, self.track._box[1] as usize, self.track._box[2] as usize, self.track._box[3] as usize), (255, 0, 0));
-        });
         vec![viewer]
     }
 }
@@ -180,6 +188,7 @@ use motrs::model::*;
 
 pub struct MyTracker {
     uuid: String,
+    num_steps: usize,
     dets: Vec<(Vec<Detection>, Vec<Detection>)>,
 }
 
@@ -195,6 +204,7 @@ impl MyTracker {
 
         Self {
             dets,
+            num_steps: 0,
             uuid: String::default(),
         }
     }
@@ -231,6 +241,11 @@ impl MyTracker {
     }
 }
 
+use std::pin::Pin;
+use std::future::Future;
+use genawaiter::sync::{Gen, GenBoxed};
+
+
 impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
     type Output = Progress;
 
@@ -241,33 +256,35 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
 
     fn stream(self: Box<Self>, _input: futures::stream::BoxStream<'static, E>) -> futures::stream::BoxStream<'static, Self::Output> {
         let dets = self.dets.clone();
-
-        Box::pin(futures::stream::unfold(MyState::Ready(Self::create(), dets), |state| async move {
+        let num_steps = self.num_steps;
+        let mut gen = data_generator(
+            num_steps.clone() as i64,
+            20,
+            0.03,
+            0.33,
+            0.0,
+            3.33
+        );
+        Box::pin(futures::stream::unfold(MyState::Ready(Self::create(), gen, num_steps), |state| async move {
                 match state {
-                    MyState::Ready(tracker, dets) => {
-                        Some((Progress::Started, MyState::Tracking { total: 200, count: 0, tracker: tracker, dets: dets }))
+                    MyState::Ready(tracker, gen, num_steps) => {
+                        Some((Progress::Started, MyState::Tracking { total: num_steps, count: 0, tracker: tracker, gen: gen }))
                     }
-                    MyState::Tracking { total, count, mut tracker, dets} => {
+                    MyState::Tracking { total, count, mut tracker, mut gen} => {
                         if count <= total {
-                            let c = count as usize;
-                            let detections =
-                                dets
-                                .to_vec()
-                                .clone()
-                                .into_iter()
-                                .map(|d| d.1)
-                                .flatten()
-                                .collect::<Vec<_>>();
 
-                            let detections = detections[(c * 20)..((c + 1) * 20)]
-                                .to_vec()
-                                .into_iter()
-                                .filter(|v| v._box.is_some())
-                                .collect::<Vec<_>>();
+                            if let genawaiter::GeneratorState::Yielded((det_pred, det_gt)) = gen.resume() {
+                                let target = det_gt
+                                    .to_vec()
+                                    .into_iter()
+                                    .filter(|v| v._box.is_some())
+                                    .collect::<Vec<_>>();
+                                let active_tracks = tracker.step(target.clone());
 
-                            let active_tracks = tracker.step(detections);
-                            //let active_tracks = vec![];
-                            Some((Progress::Advanced(count, active_tracks), MyState::Tracking{ total, count: count + 1, tracker, dets }))
+                                Some((Progress::Advanced(count, active_tracks, target), MyState::Tracking{ total, count: count + 1, tracker, gen }))
+                            } else {
+                                Some((Progress::Finished, MyState::Finished))
+                            }
                         } else {
                             Some((Progress::Finished, MyState::Finished))
                         }
@@ -285,19 +302,19 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
 #[derive(Debug, Clone)]
 pub enum Progress {
     Started,
-    Advanced(u64, Vec<Track>),
+    Advanced(usize, Vec<Track>, Vec<Detection>),
     Finished,
     Errored,
 }
 
 
 pub enum MyState {
-    Ready(MultiObjectTracker, Vec<(Vec<Detection>, Vec<Detection>)>),
+    Ready(MultiObjectTracker, GenBoxed<(Vec<Detection>, Vec<Detection>)>, usize),
     Tracking {
-        total: u64,
-        count: u64,
+        total: usize,
+        count: usize,
         tracker: MultiObjectTracker,
-        dets: Vec<(Vec<Detection>, Vec<Detection>)>,
+        gen: GenBoxed<(Vec<Detection>, Vec<Detection>)>,
     },
     Finished,
 }

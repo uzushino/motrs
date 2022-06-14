@@ -525,9 +525,9 @@ impl MultiObjectTracker {
 
             {
                 let tracker = &mut self.trackers[track_idx as usize].lock().unwrap();
-                
+
                 println!("0, id: {}, staleness: {} steps_positive: {}, steps_alive; {}", tracker.id(), tracker.staleness(), tracker.steps_positive(), tracker.steps_alive());
-                
+
                 tracker.update(det);
                 // Arc::get_mut(tracker).map(|t| t.update(det));
                 self.detections_matched_ids[det_idx as usize] = tracker.id();
@@ -535,7 +535,7 @@ impl MultiObjectTracker {
                 println!("1, id: {}, staleness: {} steps_positive: {}, steps_alive; {}", tracker.id(), tracker.staleness(), tracker.steps_positive(), tracker.steps_alive());
             }
         }
-        
+
         for tracker in self.trackers.iter() {
             let tr = tracker.lock().unwrap();
             println!("2: id: {}, saleness: {} steps_positive: {}, steps_alive; {}", tr.id(), tr.staleness(), tr.steps_positive(), tr.steps_alive());
@@ -556,7 +556,7 @@ impl MultiObjectTracker {
             .into_iter()
             .collect::<Vec<_>>();
         diff.sort();
-        
+
         for det_idx in diff {
             let det = &detections[*det_idx as usize];
             let tracker = self.tracker_clss(None, det._box.clone(), det.clone());
@@ -592,7 +592,7 @@ impl MultiObjectTracker {
             let tracker = &mut self.trackers[*track_idx as usize].lock().unwrap();
             tracker.stale(None);
         }
-        
+
         for tracker in self.trackers.iter() {
             let tr = tracker.lock().unwrap();
             println!("4: id: {}, saleness: {} steps_positive: {}, steps_alive; {}", tr.id(), tr.staleness(), tr.steps_positive(), tr.steps_alive());
@@ -614,7 +614,7 @@ impl MultiObjectTracker {
         self.trackers = self
             .trackers
             .iter()
-            .filter(|t| { 
+            .filter(|t| {
                 let tr = t.lock().unwrap();
                 !(tr.is_stale() || tr.is_invalid())
             })

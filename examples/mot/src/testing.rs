@@ -220,7 +220,7 @@ pub fn data_generator(
             let mut dets_pred = vec![];
 
             for mut actor in actors.iter_mut() {
-                let (mut det_gt, mut det_pred) = (&mut actor).detections(&step);
+                let (det_gt, det_pred) = (&mut actor).detections(&step);
 
                 dets_gt.push(det_gt);
                 dets_pred.push(det_pred);

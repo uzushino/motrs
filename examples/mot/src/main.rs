@@ -189,22 +189,12 @@ use motrs::model::*;
 pub struct MyTracker {
     uuid: String,
     num_steps: usize,
-    dets: Vec<(Vec<Detection>, Vec<Detection>)>,
 }
 
 impl MyTracker {
     pub fn new() -> Self {
-        let dets = data_generator_file(
-            &std::path::Path::new("./gt.csv"),
-            &std::path::Path::new("./pred.csv")
-        )
-        .into_iter()
-        .take(200)
-        .collect::<Vec<_>>();
-
         Self {
-            dets,
-            num_steps: 0,
+            num_steps: 1000,
             uuid: String::default(),
         }
     }
@@ -255,10 +245,9 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
     }
 
     fn stream(self: Box<Self>, _input: futures::stream::BoxStream<'static, E>) -> futures::stream::BoxStream<'static, Self::Output> {
-        let dets = self.dets.clone();
         let num_steps = self.num_steps;
-        let mut gen = data_generator(
-            num_steps.clone() as i64,
+        let gen = data_generator(
+            num_steps as i64,
             20,
             0.03,
             0.33,
@@ -272,7 +261,6 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
                     }
                     MyState::Tracking { total, count, mut tracker, mut gen} => {
                         if count <= total {
-
                             if let genawaiter::GeneratorState::Yielded((det_pred, det_gt)) = gen.resume() {
                                 let target = det_gt
                                     .to_vec()

@@ -1,22 +1,17 @@
 use motrs::tracker::*;
 use motrs::model::*;
-
-use nalgebra as na;
+use genawaiter::sync::{Gen, GenBoxed};
 
 use iced::{
-    button, futures, image, Clipboard, Application, Button, Column, Command, executor,
-    Container, Element, Length, Row, Settings, Text, canvas::Path, Point, Size, Sandbox,
-    canvas, Rectangle, Color, time, Subscription
+    futures, Clipboard, Application, Command, executor,
+    Container, Element, Length, Settings, canvas::Path, Point, Size,
+    canvas, Rectangle, Color, Subscription
 };
-use core::num;
-use std::time::{Duration, Instant};
 
 mod testing;
 mod tracker;
 
-use crate::testing::{ data_generator, data_generator_file };
-use std::vec::IntoIter;
-type Generator = GenBoxed<(Vec<Detection>, Vec<Detection>)>;
+use crate::testing::data_generator;
 
 pub fn main() -> iced::Result {
     ImageViewer::run(Settings {
@@ -59,11 +54,7 @@ fn draw_rectangle(frame: &mut canvas::Frame, _box: (usize, usize, usize, usize),
 
 #[derive(Default)]
 struct ImageViewer {
-    pub speed: usize,
-    pub num_steps: i64,
-    pub tracker: Option<MultiObjectTracker>,
     pub viewer: canvas::Cache,
-
     pub active_tracks: Vec<Track>,
     pub detections: Vec<Detection>
 }
@@ -109,9 +100,6 @@ impl Application for ImageViewer {
 
         (
             Self {
-                speed: 5,
-                num_steps: 0,
-                tracker: Some(tracker),
                 viewer: Default::default(),
                 active_tracks: Vec::default(),
                 detections: Vec::default()
@@ -183,11 +171,8 @@ impl<Message> canvas::Program<Message> for ImageViewer {
 }
 
 use iced_futures::subscription::Recipe;
-use motrs::tracker::*;
-use motrs::model::*;
 
 pub struct MyTracker {
-    uuid: String,
     num_steps: usize,
 }
 
@@ -195,7 +180,6 @@ impl MyTracker {
     pub fn new() -> Self {
         Self {
             num_steps: 1000,
-            uuid: String::default(),
         }
     }
 
@@ -227,13 +211,11 @@ impl MyTracker {
                 ..Default::default()
             })
         );
+
         tracker
     }
 }
 
-use std::pin::Pin;
-use std::future::Future;
-use genawaiter::sync::{Gen, GenBoxed};
 
 
 impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
@@ -246,6 +228,7 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
 
     fn stream(self: Box<Self>, _input: futures::stream::BoxStream<'static, E>) -> futures::stream::BoxStream<'static, Self::Output> {
         let num_steps = self.num_steps;
+
         let gen = data_generator(
             num_steps as i64,
             20,
@@ -254,6 +237,7 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
             0.0,
             3.33
         );
+
         Box::pin(futures::stream::unfold(MyState::Ready(Self::create(), gen, num_steps), |state| async move {
                 match state {
                     MyState::Ready(tracker, gen, num_steps) => {
@@ -261,7 +245,7 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
                     }
                     MyState::Tracking { total, count, mut tracker, mut gen} => {
                         if count <= total {
-                            if let genawaiter::GeneratorState::Yielded((det_pred, det_gt)) = gen.resume() {
+                            if let genawaiter::GeneratorState::Yielded((_det_pred, det_gt)) = gen.resume() {
                                 let target = det_gt
                                     .to_vec()
                                     .into_iter()

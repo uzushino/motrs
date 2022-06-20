@@ -162,7 +162,7 @@ impl<Message> canvas::Program<Message> for ImageViewer {
                 let b = det._box.clone().unwrap();
                 let f = det.feature.clone().unwrap();
                 let rect = (b[0] as usize, b[1] as usize, b[2] as usize, b[3] as usize);
-                draw_rectangle(frame, rect, (f[0] as u8, f[1] as u8, f[2] as u8), true);
+                draw_rectangle(frame, rect, (f[0] * 256 as u8, f[1] * 256 as u8, f[2] * 256 as u8), true);
             });
         });
 

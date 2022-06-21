@@ -525,20 +525,9 @@ impl MultiObjectTracker {
 
             {
                 let tracker = &mut self.trackers[track_idx as usize].lock().unwrap();
-
-                println!("0, id: {}, staleness: {} steps_positive: {}, steps_alive; {}", tracker.id(), tracker.staleness(), tracker.steps_positive(), tracker.steps_alive());
-
                 tracker.update(det);
-                // Arc::get_mut(tracker).map(|t| t.update(det));
                 self.detections_matched_ids[det_idx as usize] = tracker.id();
-
-                println!("1, id: {}, staleness: {} steps_positive: {}, steps_alive; {}", tracker.id(), tracker.staleness(), tracker.steps_positive(), tracker.steps_alive());
             }
-        }
-
-        for tracker in self.trackers.iter() {
-            let tr = tracker.lock().unwrap();
-            println!("2: id: {}, saleness: {} steps_positive: {}, steps_alive; {}", tr.id(), tr.staleness(), tr.steps_positive(), tr.steps_alive());
         }
 
         let assigned_det_idxs: HashSet<u64> = if matches.len() > 0 {
@@ -567,11 +556,6 @@ impl MultiObjectTracker {
             self.trackers.push(Arc::new(tracker));
         }
 
-        for tracker in self.trackers.iter() {
-            let tr = tracker.lock().unwrap();
-            println!("3: id: {}, saleness: {} steps_positive: {}, steps_alive; {}", tr.id(), tr.staleness(), tr.steps_positive(), tr.steps_alive());
-        }
-
         let assigned_track_idxs: HashSet<u64> = if matches.len() > 0 {
             let assigned_track_idxs = matches.index((.., 0)).data.into_slice().to_vec();
             let assigned_track_idxs = assigned_track_idxs.iter().map(|v| *v as u64);
@@ -593,11 +577,6 @@ impl MultiObjectTracker {
             tracker.stale(None);
         }
 
-        for tracker in self.trackers.iter() {
-            let tr = tracker.lock().unwrap();
-            println!("4: id: {}, saleness: {} steps_positive: {}, steps_alive; {}", tr.id(), tr.staleness(), tr.steps_positive(), tr.steps_alive());
-        }
-
         self.cleanup_trackers();
 
         self.active_tracks(self.active_tracks_kwargs.clone())
@@ -605,11 +584,6 @@ impl MultiObjectTracker {
 
     pub fn cleanup_trackers(&mut self) {
         let count_before = self.trackers.len();
-
-        for tracker in self.trackers.iter() {
-            let tr = tracker.lock().unwrap();
-            println!("5 id: {}, saleness: {} steps_positive: {}, steps_alive; {}", tr.id(), tr.staleness(), tr.steps_positive(), tr.steps_alive());
-        }
 
         self.trackers = self
             .trackers
@@ -620,11 +594,6 @@ impl MultiObjectTracker {
             })
             .map(|t| t.clone())
             .collect::<Vec<_>>();
-
-        for tracker in self.trackers.iter() {
-            let tr = tracker.lock().unwrap();
-            println!("6 id: {}, staleness: {} steps_positive: {}, steps_alive; {}", tr.id(), tr.staleness(), tr.steps_positive(), tr.steps_alive());
-        }
 
         let count_after = self.trackers.len();
 

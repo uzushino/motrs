@@ -35,7 +35,7 @@ fn draw_rectangle(frame: &mut canvas::Frame, _box: (usize, usize, usize, usize),
         r: (color.0 / 255u8) as f32,
         g: (color.1 / 255u8) as f32,
         b: (color.2 / 255u8) as f32,
-        a: 1.,
+        a: 0.5,
     };
 
     frame.with_save(|frame| {
@@ -162,7 +162,7 @@ impl<Message> canvas::Program<Message> for ImageViewer {
                 let b = det._box.clone().unwrap();
                 let f = det.feature.clone().unwrap();
                 let rect = (b[0] as usize, b[1] as usize, b[2] as usize, b[3] as usize);
-                draw_rectangle(frame, rect, (f[0] * 256 as u8, f[1] * 256 as u8, f[2] * 256 as u8), true);
+                draw_rectangle(frame, rect, ((f[0] * 256. % 256.) as u8, (f[1] * 256. % 256.) as u8, (f[2] * 256. % 256.) as u8), true);
             });
         });
 

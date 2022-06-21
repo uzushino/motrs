@@ -1,5 +1,5 @@
 [package]
-name = "mot"
+name = "2d_multi_object_tracking"
 edition = "2021"
 publish = false
 version = "0.1.0"

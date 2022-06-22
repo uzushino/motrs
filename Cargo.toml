@@ -23,5 +23,5 @@ genawaiter = "0.99.1"
 
 [workspace]
 members = [
-    "examples/2d_multi_object_tracking"
+    "examples/multi_object_2d_tracking",
 ]

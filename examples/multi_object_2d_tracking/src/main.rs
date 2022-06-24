@@ -9,7 +9,6 @@ use iced::{
 };
 
 mod testing;
-mod tracker;
 
 use crate::testing::data_generator;
 

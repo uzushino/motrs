@@ -16,6 +16,10 @@ pub fn rand_uniform<R: Rng>(rng: &mut R, min_val: f64, max_val: f64) -> f64 {
     rng.sample::<f64, _>(Uniform::new(min_val, max_val))
 }
 
+pub fn random<R: Rng>(rng: &mut R) -> f64 {
+    rng.gen()
+}
+
 pub fn rand_color<R: Rng>(rng: &mut R) -> [i64; 3] {
     let r = rand_int(rng, 0, 255);
     let g = rand_int(rng, 0, 255);

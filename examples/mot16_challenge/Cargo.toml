@@ -19,4 +19,4 @@ rand_distr = "*"
 csv = "*"
 
 polars = { version = "*", features = ["lazy", "csv-file"] }
-polars-core = { version = "*", features = ["rows"] }
+polars-core = { version = "*", features = ["rows", "private"] }

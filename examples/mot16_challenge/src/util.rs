@@ -4,9 +4,9 @@ use polars::prelude::*;
 use nalgebra as na;
 use motrs::tracker::Detection;
 use genawaiter::rc::{ Gen, Co };
+use std::future::Future;
 
 use crate::testing::{rand_uniform, rand_int, random};
-
 
 fn read_video_frame(dir: &std::path::Path, frame_idx: u64) -> PathBuf {
     let frame = format!("{0:>08}.jpg", frame_idx);
@@ -42,6 +42,7 @@ async fn detections(co: Co<(i32, Vec<Detection>)>, df: &DataFrame, add_detection
             AnyValue::Int16(v) => v.clone() as f64,
             AnyValue::Int32(v) => v.clone() as f64,
             AnyValue::Int64(v) => v.clone() as f64,
+            _ => 0.
         }
     }
 
@@ -86,50 +87,29 @@ async fn detections(co: Co<(i32, Vec<Detection>)>, df: &DataFrame, add_detection
     }
 }
 
-fn read_detections(path: &std::path::Path, drop_detection_prob: f64, add_detection_noise: f64) -> Gen<(i32, Vec<Detection>)> {
+pub fn read_detections(path: &std::path::Path, drop_detection_prob: f64, add_detection_noise: f64) -> Gen<(i32, Vec<Detection>), (), impl Future<Output=()>> {
     let path = env::current_dir().unwrap().join(path);
-    if ! path.is_file() {
+    if !path.is_file() {
         panic!()
     }
 
-    let df = LazyCsvReader::new("../datasets/foods1.csv".into())
+    let df = LazyCsvReader::new(path.to_string_lossy().to_string())
         .finish()
         .collect()
         .unwrap();
 
-    Gen::new(|co| async {
+    Gen::new(|co| async move {
         let df = df.clone();
-
         detections(co, &df, add_detection_noise, drop_detection_prob).await;
     })
 }
 
-/*
-def read_detections(path, drop_detection_prob: float = 0.0, add_detection_noise: float = 0.0):
-    """ parses and converts MOT16 benchmark annotations to known [xmin, ymin, xmax, ymax] format """
-    path = os.path.expanduser(path)
-    logger.debug(f'reading detections from {path}')
-    if not os.path.isfile(path):
-        raise ValueError('file does not exist')
+mod test {
+    use super::*;
 
-    df = pd.read_csv(path, names=COL_NAMES)
-
-    max_frame = df.frame_idx.max()
-    for frame_idx in range(max_frame):
-        detections = []
-        for _, row in df[df.frame_idx == frame_idx].iterrows():
-            if random.random() < drop_detection_prob:
-                continue
-
-            box = [row.bb_left, row.bb_top,
-                   row.bb_left + row.bb_width,
-                   row.bb_top + row.bb_height]
-
-            if add_detection_noise > 0:
-                for i in range(4):
-                    box[i] += random.uniform(-add_detection_noise, add_detection_noise)
-
-            detections.append(Detection(box=box))
-
-        yield frame_idx, detections
- */
+    #[test]
+    fn test_read_video_frame() {
+        let path = read_video_frame(std::path::Path::new("/tmp"), 1);
+        assert_eq!(path.as_os_str(), "/tmp/00000001.jpg");
+    }
+}

@@ -1,19 +1,36 @@
 use motrs::tracker::*;
 use motrs::model::*;
-use genawaiter::sync::{Gen, GenBoxed};
+use genawaiter::sync::{GenBoxed};
 
 use iced::{
     futures, Clipboard, Application, Command, executor,
-    Container, Element, Length, Settings, canvas::Path, Point, Size,
-    canvas, Rectangle, Color, Subscription
+    Container, Element, Length, Settings,
+    canvas, Rectangle, Subscription
 };
+use std::env;
 
 mod testing;
 mod util;
 
 use crate::testing::data_generator;
+use crate::util::read_detections;
 
 pub fn main() -> iced::Result {
+    let fps = 30.0;
+    let split = "train";
+    let seq_id = "04";
+    let sel = "gt";
+    let drop_detection_prob = 0.1;
+    let add_detection_noise = 5.0;
+
+    let dataset_root = "./";
+    let dataset_root = env::current_dir().unwrap().join(dataset_root);
+    let dataset_root2 = format!("{}/{}/MOT16-{}", dataset_root.as_os_str().as_ref(), split, seq_id);
+
+    let frames_dir = format!("{}/img1", dataset_root2);
+    let dets_path = format!("{}/{}/{}.txt", dataset_root2, sel, sel);
+    let dets_gen = read_detections(dets_path, drop_detection_prob, add_detection_noise);
+
     Mot16Challenge::run(Settings {
         antialiasing: true,
         ..Settings::default()
@@ -40,33 +57,6 @@ impl Application for Mot16Challenge {
     type Flags = ();
 
     fn new(_: Self::Flags) -> (Self, Command<Message>) {
-        let model_spec = ModelPreset::constant_acceleration_and_static_box_size_2d();
-        let min_iou = 1. / 24.;
-        let multi_match_min_iou = 1. + 1e-7;
-        let feature_similarity_fn = None;
-        let feature_similarity_beta = None;
-        let matching_fn = IOUAndFeatureMatchingFunction::new(
-            min_iou,
-            multi_match_min_iou,
-            feature_similarity_fn,
-            feature_similarity_beta,
-        );
-        let tracker = MultiObjectTracker::new(
-            0.1,
-            model_spec,
-            Some(matching_fn),
-            Some(SingleObjectTrackerKwargs {
-                max_staleness: 12.,
-                ..Default::default()
-            }),
-            None,
-            Some(ActiveTracksKwargs {
-                min_steps_alive: 2,
-                max_staleness: 6.,
-                ..Default::default()
-            })
-        );
-
         (
             Self {
                 viewer: Default::default(),
@@ -118,20 +108,10 @@ impl Application for Mot16Challenge {
     }
 }
 
-impl<Message> canvas::Program<Message> for ImageViewer {
+impl<Message> canvas::Program<Message> for Mot16Challenge {
     fn draw(&self, bounds: Rectangle, _cursor: canvas::Cursor) -> Vec<canvas::Geometry> {
         let viewer = self.viewer.draw(bounds.size(), |frame| {
-            self.active_tracks.iter().for_each(|track| {
-                let rect = (track._box[0] as usize, track._box[1] as usize, track._box[2] as usize, track._box[3] as usize);
-                draw_rectangle(frame, rect, (0, 255, 0), false);
-            });
 
-            self.detections.iter().for_each(|det|  {
-                let b = det._box.clone().unwrap();
-                let f = det.feature.clone().unwrap();
-                let rect = (b[0] as usize, b[1] as usize, b[2] as usize, b[3] as usize);
-                draw_rectangle(frame, rect, ((f[0] * 256. % 256.) as u8, (f[1] * 256. % 256.) as u8, (f[2] * 256. % 256.) as u8), true);
-            });
         });
 
         vec![viewer]

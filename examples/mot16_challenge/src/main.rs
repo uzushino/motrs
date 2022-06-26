@@ -1,6 +1,6 @@
 use motrs::tracker::*;
 use motrs::model::*;
-use genawaiter::sync::{GenBoxed};
+use genawaiter::rc::Gen;
 
 use iced::{
     futures, Clipboard, Application, Command, executor,
@@ -12,25 +12,9 @@ use std::env;
 mod testing;
 mod util;
 
-use crate::testing::data_generator;
 use crate::util::read_detections;
 
 pub fn main() -> iced::Result {
-    let fps = 30.0;
-    let split = "train";
-    let seq_id = "04";
-    let sel = "gt";
-    let drop_detection_prob = 0.1;
-    let add_detection_noise = 5.0;
-
-    let dataset_root = "./";
-    let dataset_root = env::current_dir().unwrap().join(dataset_root);
-    let dataset_root2 = format!("{}/{}/MOT16-{}", dataset_root.as_os_str().as_ref(), split, seq_id);
-
-    let frames_dir = format!("{}/img1", dataset_root2);
-    let dets_path = format!("{}/{}/{}.txt", dataset_root2, sel, sel);
-    let dets_gen = read_detections(dets_path, drop_detection_prob, add_detection_noise);
-
     Mot16Challenge::run(Settings {
         antialiasing: true,
         ..Settings::default()
@@ -133,7 +117,7 @@ impl MyTracker {
 
     pub fn create() -> MultiObjectTracker {
         let model_spec = ModelPreset::constant_acceleration_and_static_box_size_2d();
-        let min_iou = 1. / 24.;
+        let min_iou = 0.25;
         let multi_match_min_iou = 1. + 1e-7;
         let feature_similarity_fn = None;
         let feature_similarity_beta = None;
@@ -145,19 +129,15 @@ impl MyTracker {
         );
 
         let tracker = MultiObjectTracker::new(
-            0.1,
+            1 / 30., 
             model_spec,
             Some(matching_fn),
             Some(SingleObjectTrackerKwargs {
-                max_staleness: 12.,
+                max_staleness: 15.,
                 ..Default::default()
             }),
             None,
-            Some(ActiveTracksKwargs {
-                min_steps_alive: 2,
-                max_staleness: 6.,
-                ..Default::default()
-            })
+            None
         );
 
         tracker
@@ -177,16 +157,23 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
     fn stream(self: Box<Self>, _input: futures::stream::BoxStream<'static, E>) -> futures::stream::BoxStream<'static, Self::Output> {
         let num_steps = self.num_steps;
 
-        let gen = data_generator(
-            num_steps as i64,
-            20,
-            0.03,
-            0.33,
-            0.0,
-            3.33
-        );
+        let fps = 30.0;
+        let split = "train";
+        let seq_id = "04";
+        let sel = "gt";
+        let drop_detection_prob = 0.1;
+        let add_detection_noise = 5.0;
 
-        Box::pin(futures::stream::unfold(MyState::Ready(Self::create(), gen, num_steps), |state| async move {
+        let dataset_root = "./";
+        let dataset_root = env::current_dir().unwrap().join(dataset_root);
+        let dataset_root2 = format!("{}/{}/MOT16-{}", dataset_root.as_os_str().as_ref(), split, seq_id);
+
+        let frames_dir = format!("{}/img1", dataset_root2);
+        let dets_path = format!("{}/{}/{}.txt", dataset_root2, sel, sel);
+        let dets_path = std::path::Path::new(dets_path.as_str());
+        let dets_gen = read_detections(dets_path, drop_detection_prob, add_detection_noise);
+
+        Box::pin(futures::stream::unfold(MyState::Ready(Self::create(), dets_gen, num_steps), |state| async move {
                 match state {
                     MyState::Ready(tracker, gen, num_steps) => {
                         Some((Progress::Started, MyState::Tracking { total: num_steps, count: 0, tracker: tracker, gen: gen }))
@@ -229,12 +216,12 @@ pub enum Progress {
 
 
 pub enum MyState {
-    Ready(MultiObjectTracker, GenBoxed<(Vec<Detection>, Vec<Detection>)>, usize),
+    Ready(MultiObjectTracker, Gen<(i32, Vec<Detection>)>, usize),
     Tracking {
         total: usize,
         count: usize,
         tracker: MultiObjectTracker,
-        gen: GenBoxed<(Vec<Detection>, Vec<Detection>)>,
+        gen: Gen<(i32, Vec<Detection>)>,
     },
     Finished,
 }

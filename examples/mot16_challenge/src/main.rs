@@ -104,15 +104,11 @@ impl<Message> canvas::Program<Message> for Mot16Challenge {
 
 use iced_futures::subscription::Recipe;
 
-pub struct MyTracker {
-    num_steps: usize,
-}
+pub struct MyTracker {}
 
 impl MyTracker {
     pub fn new() -> Self {
-        Self {
-            num_steps: 1000,
-        }
+        Self {}
     }
 
     pub fn create() -> MultiObjectTracker {
@@ -129,7 +125,7 @@ impl MyTracker {
         );
 
         let tracker = MultiObjectTracker::new(
-            1 / 30., 
+            1 / 30.,
             model_spec,
             Some(matching_fn),
             Some(SingleObjectTrackerKwargs {

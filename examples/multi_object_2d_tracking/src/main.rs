@@ -215,8 +215,6 @@ impl MyTracker {
     }
 }
 
-
-
 impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
     type Output = Progress;
 

@@ -1,18 +1,21 @@
+use std::borrow::Borrow;
+use std::env;
+use std::sync::{Arc, Mutex};
+
 use motrs::tracker::*;
 use motrs::model::*;
-use genawaiter::rc::Gen;
 
 use iced::{
-    futures, Clipboard, Application, Command, executor,
+    Application, Command, executor,
     Container, Element, Length, Settings,
-    canvas, Rectangle, Subscription
+    Rectangle, Subscription, canvas
 };
-use std::env;
+use iced_native::subscription;
+use std::hash::Hash;
 
-mod testing;
 mod util;
 
-use crate::util::read_detections;
+use crate::util::{ read_detections };
 
 pub fn main() -> iced::Result {
     Mot16Challenge::run(Settings {
@@ -55,7 +58,7 @@ impl Application for Mot16Challenge {
         String::from("mot16_challenge")
     }
 
-    fn update(&mut self, message: Message, _: &mut Clipboard) -> Command<Message> {
+    fn update(&mut self, message: Message) -> Command<Message> {
         match message {
             Message::Tracking(active_tracks, detections) => {
                 self.active_tracks = active_tracks;
@@ -67,8 +70,8 @@ impl Application for Mot16Challenge {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        iced::Subscription::from_recipe(MyTracker::new()).map(|v| {
-            match v {
+        worker(0).map(|v| {
+            match v.1 {
                 Progress::Advanced(c, active_tracks, detections) => {
                     Message::Tracking(active_tracks, detections)
                 },
@@ -101,9 +104,6 @@ impl<Message> canvas::Program<Message> for Mot16Challenge {
         vec![viewer]
     }
 }
-
-use iced_futures::subscription::Recipe;
-
 pub struct MyTracker {}
 
 impl MyTracker {
@@ -125,7 +125,7 @@ impl MyTracker {
         );
 
         let tracker = MultiObjectTracker::new(
-            1 / 30.,
+            1. / 30.,
             model_spec,
             Some(matching_fn),
             Some(SingleObjectTrackerKwargs {
@@ -140,8 +140,68 @@ impl MyTracker {
     }
 }
 
+fn worker<I: 'static + Hash + Copy + Send + Sync>(id: I) -> iced::Subscription<(I, Progress)> {
+    let fps = 30.0;
+    let split = "train";
+    let seq_id = "04";
+    let sel = "gt";
+    let drop_detection_prob = 0.1;
+    let add_detection_noise = 5.0;
 
+    let dataset_root = "./";
+    let dataset_root = env::current_dir().unwrap().join(dataset_root);
+    let dataset_root2 = format!("{}/{}/MOT16-{}", dataset_root.as_path().display().to_string(), split, seq_id);
 
+    let frames_dir = format!("{}/img1", dataset_root2);
+    let _dets_path = format!("{}/{}/{}.txt", dataset_root2, sel, sel);
+
+    let init_state = MyState::Ready(MyTracker::create(), 0);
+    let dets_path = std::path::Path::new(_dets_path.as_str());
+    let dets_gen = read_detections(
+            dets_path,
+            drop_detection_prob,
+            add_detection_noise
+    );
+
+    let gen = Arc::new(Mutex::new(dets_gen));
+
+    subscription::unfold(id, init_state, move |state| {
+        let gen = gen.clone();
+        tracking(id, gen, state)
+    })
+}
+
+async fn tracking<T, I: Copy>(id: I, gen: Arc<Mutex<T>>, state: MyState) -> (Option<(I, Progress)>, MyState) where T: Iterator<Item=(i32, Vec<Detection>)> {
+    match state {
+        MyState::Ready(tracker, num_steps) => {
+            (Some((id, Progress::Started)), MyState::Tracking { total: num_steps, count: 0, tracker: tracker })
+        }
+        MyState::Tracking { total, count, mut tracker} => {
+            if count <= total {
+                if let Some((_det_pred, det_gt)) = gen.lock().unwrap().next() {
+                    let target = det_gt
+                        .to_vec()
+                        .into_iter()
+                        .filter(|v| v._box.is_some())
+                        .collect::<Vec<_>>();
+
+                    let active_tracks = tracker.step(target.clone());
+
+                    (Some((id, Progress::Advanced(count, active_tracks, target))), MyState::Tracking{ total, count: count + 1, tracker })
+                } else {
+                    (Some((id, Progress::Finished)), MyState::Finished)
+                }
+            } else {
+                (Some((id, Progress::Finished)), MyState::Finished)
+            }
+        },
+        MyState::Finished => {
+            (None, MyState::Finished)
+        }
+    }
+}
+
+/*
 impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
     type Output = Progress;
 
@@ -151,8 +211,6 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
     }
 
     fn stream(self: Box<Self>, _input: futures::stream::BoxStream<'static, E>) -> futures::stream::BoxStream<'static, Self::Output> {
-        let num_steps = self.num_steps;
-
         let fps = 30.0;
         let split = "train";
         let seq_id = "04";
@@ -168,39 +226,38 @@ impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
         let dets_path = format!("{}/{}/{}.txt", dataset_root2, sel, sel);
         let dets_path = std::path::Path::new(dets_path.as_str());
         let dets_gen = read_detections(dets_path, drop_detection_prob, add_detection_noise);
+        let state = MyState::Ready(Self::create(), dets_gen, 0);
 
-        Box::pin(futures::stream::unfold(MyState::Ready(Self::create(), dets_gen, num_steps), |state| async move {
-                match state {
-                    MyState::Ready(tracker, gen, num_steps) => {
-                        Some((Progress::Started, MyState::Tracking { total: num_steps, count: 0, tracker: tracker, gen: gen }))
-                    }
-                    MyState::Tracking { total, count, mut tracker, mut gen} => {
-                        if count <= total {
-                            if let genawaiter::GeneratorState::Yielded((_det_pred, det_gt)) = gen.resume() {
-                                let target = det_gt
-                                    .to_vec()
-                                    .into_iter()
-                                    .filter(|v| v._box.is_some())
-                                    .collect::<Vec<_>>();
-                                let active_tracks = tracker.step(target.clone());
+        Box::pin(futures::stream::unfold(MyState::Ready(Self::create(), dets_gen, 0), |state| async move {
+            match state {
+                MyState::Ready(tracker, gen, num_steps) => {
+                    Some((Progress::Started, MyState::Tracking { total: num_steps, count: 0, tracker: tracker }))
+                }
+                MyState::Tracking { total, count, mut tracker, mut gen} => {
+                    if count <= total {
+                        if let genawaiter::GeneratorState::Yielded((_det_pred, det_gt)) = gen.resume() {
+                            let target = det_gt
+                                .to_vec()
+                                .into_iter()
+                                .filter(|v| v._box.is_some())
+                                .collect::<Vec<_>>();
+                            let active_tracks = tracker.step(target.clone());
 
-                                Some((Progress::Advanced(count, active_tracks, target), MyState::Tracking{ total, count: count + 1, tracker, gen }))
-                            } else {
-                                Some((Progress::Finished, MyState::Finished))
-                            }
+                            Some((Progress::Advanced(count, active_tracks, target), MyState::Tracking{ total, count: count + 1, tracker, gen }))
                         } else {
                             Some((Progress::Finished, MyState::Finished))
                         }
-                    },
-                    MyState::Finished => {
-                        let _: () = iced::futures::future::pending().await;
-                        None
+                    } else {
+                        Some((Progress::Finished, MyState::Finished))
                     }
+                },
+                MyState::Finished => {
+                    None
                 }
-            },
-        ))
+            }
+        }))
     }
-}
+}*/
 
 #[derive(Debug, Clone)]
 pub enum Progress {
@@ -210,14 +267,12 @@ pub enum Progress {
     Errored,
 }
 
-
 pub enum MyState {
-    Ready(MultiObjectTracker, Gen<(i32, Vec<Detection>)>, usize),
+    Ready(MultiObjectTracker, usize),
     Tracking {
         total: usize,
         count: usize,
         tracker: MultiObjectTracker,
-        gen: Gen<(i32, Vec<Detection>)>,
     },
     Finished,
 }

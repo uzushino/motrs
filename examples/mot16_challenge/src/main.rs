@@ -148,7 +148,7 @@ fn worker<I: 'static + Hash + Copy + Send + Sync>(id: I) -> iced::Subscription<(
     let drop_detection_prob = 0.1;
     let add_detection_noise = 5.0;
 
-    let dataset_root = "./";
+    let dataset_root = "examples/mot16_challenge/MOT16";
     let dataset_root = env::current_dir().unwrap().join(dataset_root);
     let dataset_root2 = format!("{}/{}/MOT16-{}", dataset_root.as_path().display().to_string(), split, seq_id);
 
@@ -171,7 +171,7 @@ fn worker<I: 'static + Hash + Copy + Send + Sync>(id: I) -> iced::Subscription<(
     })
 }
 
-async fn tracking<T, I: Copy>(id: I, gen: Arc<Mutex<T>>, state: MyState) -> (Option<(I, Progress)>, MyState) where T: Iterator<Item=(i32, Vec<Detection>)> {
+async fn tracking<T, I: Copy>(id: I, gen: Arc<Mutex<T>>, state: MyState) -> (Option<(I, Progress)>, MyState) where T: Iterator<Item=(i64, Vec<Detection>)> {
     match state {
         MyState::Ready(tracker, num_steps) => {
             (Some((id, Progress::Started)), MyState::Tracking { total: num_steps, count: 0, tracker: tracker })
@@ -200,64 +200,6 @@ async fn tracking<T, I: Copy>(id: I, gen: Arc<Mutex<T>>, state: MyState) -> (Opt
         }
     }
 }
-
-/*
-impl<H, E> Recipe<H, E> for MyTracker where H: std::hash::Hasher {
-    type Output = Progress;
-
-    fn hash(&self, state: &mut H) {
-        use std::hash::Hash;
-        std::any::TypeId::of::<Self>().hash(state);
-    }
-
-    fn stream(self: Box<Self>, _input: futures::stream::BoxStream<'static, E>) -> futures::stream::BoxStream<'static, Self::Output> {
-        let fps = 30.0;
-        let split = "train";
-        let seq_id = "04";
-        let sel = "gt";
-        let drop_detection_prob = 0.1;
-        let add_detection_noise = 5.0;
-
-        let dataset_root = "./";
-        let dataset_root = env::current_dir().unwrap().join(dataset_root);
-        let dataset_root2 = format!("{}/{}/MOT16-{}", dataset_root.as_os_str().as_ref(), split, seq_id);
-
-        let frames_dir = format!("{}/img1", dataset_root2);
-        let dets_path = format!("{}/{}/{}.txt", dataset_root2, sel, sel);
-        let dets_path = std::path::Path::new(dets_path.as_str());
-        let dets_gen = read_detections(dets_path, drop_detection_prob, add_detection_noise);
-        let state = MyState::Ready(Self::create(), dets_gen, 0);
-
-        Box::pin(futures::stream::unfold(MyState::Ready(Self::create(), dets_gen, 0), |state| async move {
-            match state {
-                MyState::Ready(tracker, gen, num_steps) => {
-                    Some((Progress::Started, MyState::Tracking { total: num_steps, count: 0, tracker: tracker }))
-                }
-                MyState::Tracking { total, count, mut tracker, mut gen} => {
-                    if count <= total {
-                        if let genawaiter::GeneratorState::Yielded((_det_pred, det_gt)) = gen.resume() {
-                            let target = det_gt
-                                .to_vec()
-                                .into_iter()
-                                .filter(|v| v._box.is_some())
-                                .collect::<Vec<_>>();
-                            let active_tracks = tracker.step(target.clone());
-
-                            Some((Progress::Advanced(count, active_tracks, target), MyState::Tracking{ total, count: count + 1, tracker, gen }))
-                        } else {
-                            Some((Progress::Finished, MyState::Finished))
-                        }
-                    } else {
-                        Some((Progress::Finished, MyState::Finished))
-                    }
-                },
-                MyState::Finished => {
-                    None
-                }
-            }
-        }))
-    }
-}*/
 
 #[derive(Debug, Clone)]
 pub enum Progress {

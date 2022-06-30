@@ -1,6 +1,6 @@
 use std::env;
 use std::path::PathBuf;
-use polars::prelude::*;
+use polars::{prelude::*, frame};
 use nalgebra as na;
 use motrs::tracker::Detection;
 use genawaiter::{sync::gen, yield_};
@@ -44,33 +44,47 @@ fn read_video_frame(dir: &std::path::Path, frame_idx: u64) -> PathBuf {
 }
 
 fn read_bounds_csv(path: &std::path::Path) -> DataFrame {
-    LazyCsvReader::new(path.to_string_lossy().to_string())
+    let mut df = LazyCsvReader::new(path.to_string_lossy().to_string())
         .with_ignore_parser_errors(true)
         .finish()
         .collect()
-        .unwrap()
+        .unwrap();
+
+    let result = df.set_column_names(&[
+        "frame_idx",
+        "id",
+        "bb_left",
+        "bb_top",
+        "bb_width",
+        "bb_height",
+        // "conf",
+        "x",
+        "y",
+        "z"
+    ]);
+    dbg!(&result);
+
+    df
 }
 
-fn read_max_frame(df: &DataFrame) -> i32 {
+fn read_max_frame(df: &DataFrame) -> i64 {
     let max_frame = df
         .clone()
         .lazy()
-        .groupby(vec![col("frame_idx")])
-        .agg(vec![col("frame_idx").max()])
         .collect()
-        .unwrap();
-
-    let max_frame = max_frame[0]
-        .i32()
         .unwrap()
-        .into_iter()
-        .map(|v| v.unwrap_or(0))
-        .collect::<Vec<_>>();
+        .max();
 
-    max_frame[0]
+    let frame_idx = max_frame.find_idx_by_name("frame_idx").unwrap();
+    let max_frame = max_frame.get(frame_idx).unwrap();
+
+    match max_frame[0] {
+        AnyValue::Int64(v) => v,
+        _ => 0,
+    }
 }
 
-fn read_bounds(df: &DataFrame, frame_idx: i32, drop_detection_prob: f64, add_detection_noise: f64) -> Vec<Detection> {
+fn read_bounds(df: &DataFrame, frame_idx: i64, drop_detection_prob: f64, add_detection_noise: f64) -> Vec<Detection> {
     let seed: [u8; 32] = [13; 32];
     let mut rng: StdRng = rand::SeedableRng::from_seed(seed);
 
@@ -126,13 +140,15 @@ fn to_num(v: &AnyValue) -> f64 {
     }
 }
 
-pub fn read_detections(path: &std::path::Path, drop_detection_prob: f64, add_detection_noise: f64) -> impl Iterator<Item=(i32, Vec<Detection>)> {
+pub fn read_detections(path: &std::path::Path, drop_detection_prob: f64, add_detection_noise: f64) -> impl Iterator<Item=(i64, Vec<Detection>)> {
     let path = env::current_dir().unwrap().join(path);
     if !path.is_file() {
         panic!()
     }
+    dbg!(&path);
 
     let df = read_bounds_csv(&path);
+    println!("{}", df);
 
     gen!({
         let max_frame = read_max_frame(&df);

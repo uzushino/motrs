@@ -37,7 +37,7 @@ pub fn rand_guass<R: Rng>(rng: &mut R, mu: f64, sigma2: f64) -> f64 {
     normal.sample(rng)
 }
 
-fn read_video_frame(dir: &std::path::Path, frame_idx: u64) -> PathBuf {
+pub fn read_video_frame(dir: &std::path::Path, frame_idx: u64) -> PathBuf {
     let frame = format!("{0:>08}.jpg", frame_idx);
     let fpath = dir.join(frame);
     fpath
@@ -145,14 +145,10 @@ pub fn read_detections(path: &std::path::Path, drop_detection_prob: f64, add_det
     if !path.is_file() {
         panic!()
     }
-    dbg!(&path);
 
     let df = read_bounds_csv(&path);
-    println!("{}", df);
-
     gen!({
         let max_frame = read_max_frame(&df);
-
         for frame_idx in 0..max_frame {
             let mut detections = read_bounds(&df, frame_idx, drop_detection_prob, add_detection_noise);
             yield_!((frame_idx, detections));

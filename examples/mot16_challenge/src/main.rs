@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 use std::env;
 use std::sync::{Arc, Mutex};
+use std::path::{Path, PathBuf};
 
 use motrs::tracker::*;
 use motrs::model::*;
@@ -15,7 +16,7 @@ use std::hash::Hash;
 
 mod util;
 
-use crate::util::{ read_detections };
+use crate::util::{ read_detections, read_video_frame };
 
 pub fn main() -> iced::Result {
     Mot16Challenge::run(Settings {
@@ -28,13 +29,14 @@ pub fn main() -> iced::Result {
 struct Mot16Challenge {
     pub viewer: canvas::Cache,
     pub active_tracks: Vec<Track>,
-    pub detections: Vec<Detection>
+    pub detections: Vec<Detection>,
+    pub frame_path: PathBuf,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
     Void,
-    Tracking(Vec<Track>, Vec<Detection>),
+    Tracking(Vec<Track>, Vec<Detection>, PathBuf),
 }
 
 impl Application for Mot16Challenge {
@@ -48,7 +50,8 @@ impl Application for Mot16Challenge {
             Self {
                 viewer: Default::default(),
                 active_tracks: Vec::default(),
-                detections: Vec::default()
+                detections: Vec::default(),
+                frame_path: PathBuf::default()
             },
             Command::none(),
         )
@@ -60,9 +63,10 @@ impl Application for Mot16Challenge {
 
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
-            Message::Tracking(active_tracks, detections) => {
+            Message::Tracking(active_tracks, detections, frame) => {
                 self.active_tracks = active_tracks;
                 self.detections = detections;
+                self.frame_path = frame;
             },
             _ => {}
         };
@@ -72,8 +76,8 @@ impl Application for Mot16Challenge {
     fn subscription(&self) -> Subscription<Message> {
         worker(0).map(|v| {
             match v.1 {
-                Progress::Advanced(c, active_tracks, detections) => {
-                    Message::Tracking(active_tracks, detections)
+                Progress::Advanced(c, active_tracks, detections, frame) => {
+                    Message::Tracking(active_tracks, detections, frame)
                 },
                 _ => Message::Void
             }
@@ -167,27 +171,29 @@ fn worker<I: 'static + Hash + Copy + Send + Sync>(id: I) -> iced::Subscription<(
 
     subscription::unfold(id, init_state, move |state| {
         let gen = gen.clone();
-        tracking(id, gen, state)
+        tracking(id, gen, state, frames_dir.clone())
     })
 }
 
-async fn tracking<T, I: Copy>(id: I, gen: Arc<Mutex<T>>, state: MyState) -> (Option<(I, Progress)>, MyState) where T: Iterator<Item=(i64, Vec<Detection>)> {
+async fn tracking<T, I: Copy>(id: I, gen: Arc<Mutex<T>>, state: MyState, frame_dir: String) -> (Option<(I, Progress)>, MyState) where T: Iterator<Item=(i64, Vec<Detection>)> {
     match state {
         MyState::Ready(tracker, num_steps) => {
             (Some((id, Progress::Started)), MyState::Tracking { total: num_steps, count: 0, tracker: tracker })
         }
-        MyState::Tracking { total, count, mut tracker} => {
+        MyState::Tracking { total, count, mut tracker,} => {
             if count <= total {
-                if let Some((_det_pred, det_gt)) = gen.lock().unwrap().next() {
+                if let Some((frame_idx, det_gt)) = gen.lock().unwrap().next() {
                     let target = det_gt
                         .to_vec()
                         .into_iter()
                         .filter(|v| v._box.is_some())
                         .collect::<Vec<_>>();
 
+                    let frame_dir_path = Path::new(&frame_dir);
+                    let frame = read_video_frame(frame_dir_path, frame_idx as u64);
                     let active_tracks = tracker.step(target.clone());
 
-                    (Some((id, Progress::Advanced(count, active_tracks, target))), MyState::Tracking{ total, count: count + 1, tracker })
+                    (Some((id, Progress::Advanced(count, active_tracks, target, frame))), MyState::Tracking{ total, count: count + 1, tracker })
                 } else {
                     (Some((id, Progress::Finished)), MyState::Finished)
                 }
@@ -204,7 +210,7 @@ async fn tracking<T, I: Copy>(id: I, gen: Arc<Mutex<T>>, state: MyState) -> (Opt
 #[derive(Debug, Clone)]
 pub enum Progress {
     Started,
-    Advanced(usize, Vec<Track>, Vec<Detection>),
+    Advanced(usize, Vec<Track>, Vec<Detection>, PathBuf),
     Finished,
     Errored,
 }

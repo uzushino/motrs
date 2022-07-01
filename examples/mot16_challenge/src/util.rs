@@ -10,6 +10,8 @@ use rand::distributions::Uniform;
 use rand::Rng;
 use rand_distr::{ Normal, Distribution };
 
+use iced::{ canvas::Path, Color, Point, Size, canvas };
+
 const CANVAS_SIZE: i64 = 1000;
 
 pub fn rand_int<R: Rng>(rng: &mut R, min_val: i64, max_val: i64) -> i64 {
@@ -38,7 +40,7 @@ pub fn rand_guass<R: Rng>(rng: &mut R, mu: f64, sigma2: f64) -> f64 {
 }
 
 pub fn read_video_frame(dir: &std::path::Path, frame_idx: u64) -> PathBuf {
-    let frame = format!("{0:>08}.jpg", frame_idx);
+    let frame = format!("{0:>06}.jpg", frame_idx);
     let fpath = dir.join(frame);
     fpath
 }
@@ -96,6 +98,9 @@ fn read_bounds(df: &DataFrame, frame_idx: i64, drop_detection_prob: f64, add_det
     let mask = df.column("frame_idx").unwrap().eq(frame_idx);
     let filter_df = df.filter(&mask).unwrap();
 
+    dbg!(frame_idx);
+    println!("{}", filter_df);
+
     let mut detections = vec![];
 
     for row_idx in 0..filter_df.height() {
@@ -149,11 +154,44 @@ pub fn read_detections(path: &std::path::Path, drop_detection_prob: f64, add_det
     let df = read_bounds_csv(&path);
     gen!({
         let max_frame = read_max_frame(&df);
+        dbg!(&max_frame);
         for frame_idx in 0..max_frame {
             let mut detections = read_bounds(&df, frame_idx, drop_detection_prob, add_detection_noise);
             yield_!((frame_idx, detections));
         }
     }).into_iter()
+}
+
+pub fn draw_rectangle(frame: &mut canvas::Frame, _box: (usize, usize, usize, usize), color: (u8, u8, u8), fill: bool) {
+    let top_left = Point {
+        x: _box.0 as f32,
+        y: _box.1 as f32,
+    };
+
+    let size = Size {
+        width: (_box.3 as f32 - _box.1 as f32).abs(),
+        height: (_box.3 as f32 - _box.1 as f32).abs()
+    };
+
+    let color = Color {
+        r: (color.0 / 255u8) as f32,
+        g: (color.1 / 255u8) as f32,
+        b: (color.2 / 255u8) as f32,
+        a: 0.5,
+    };
+
+    frame.with_save(|frame| {
+        let path = Path::rectangle(top_left, size);
+
+        if fill {
+            frame.fill(&path, canvas::Fill {
+                color,
+                ..Default::default()
+            });
+        }
+
+        frame.stroke(&path, canvas::Stroke::default().with_color(color));
+    })
 }
 
 mod test {

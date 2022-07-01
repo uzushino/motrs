@@ -9,14 +9,16 @@ use motrs::model::*;
 use iced::{
     Application, Command, executor,
     Container, Element, Length, Settings,
-    Rectangle, Subscription, canvas
+    Rectangle, Subscription, canvas,
+    Image, Alignment, Column
 };
+
 use iced_native::subscription;
 use std::hash::Hash;
 
 mod util;
 
-use crate::util::{ read_detections, read_video_frame };
+use crate::util::{ read_detections, read_video_frame, draw_rectangle };
 
 pub fn main() -> iced::Result {
     Mot16Challenge::run(Settings {
@@ -87,11 +89,24 @@ impl Application for Mot16Challenge {
     fn view(&mut self) -> Element<Message> {
         self.viewer.clear();
 
+        let frame_path = self.frame_path.clone();
+        dbg!(&frame_path);
+
+        let image = Image::new(frame_path.clone())
+            .width(Length::Fill)
+            .height(Length::Fill);
+
         let canvas = canvas::Canvas::new(self)
             .width(Length::Fill)
             .height(Length::Fill);
 
-        Container::new(canvas)
+        let content  = Column::new()
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .push(canvas)
+            .push(image);
+
+        Container::new(content)
             .width(Length::Fill)
             .height(Length::Fill)
             .padding(20)
@@ -102,8 +117,11 @@ impl Application for Mot16Challenge {
 impl<Message> canvas::Program<Message> for Mot16Challenge {
     fn draw(&self, bounds: Rectangle, _cursor: canvas::Cursor) -> Vec<canvas::Geometry> {
         let viewer = self.viewer.draw(bounds.size(), |frame| {
-
-        });
+            self.active_tracks.iter().for_each(|track| {
+                let rect = (track._box[0] as usize, track._box[1] as usize, track._box[2] as usize, track._box[3] as usize);
+                draw_rectangle(frame, rect, (0, 255, 0), false);
+            });
+       });
 
         vec![viewer]
     }
@@ -159,7 +177,7 @@ fn worker<I: 'static + Hash + Copy + Send + Sync>(id: I) -> iced::Subscription<(
     let frames_dir = format!("{}/img1", dataset_root2);
     let _dets_path = format!("{}/{}/{}.txt", dataset_root2, sel, sel);
 
-    let init_state = MyState::Ready(MyTracker::create(), 0);
+    let init_state = MyState::Ready(MyTracker::create(), 1000);
     let dets_path = std::path::Path::new(_dets_path.as_str());
     let dets_gen = read_detections(
             dets_path,

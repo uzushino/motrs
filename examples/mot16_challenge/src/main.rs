@@ -17,7 +17,7 @@ use iced_native::subscription;
 use iced_native::image::Handle;
 use polars::frame;
 use std::hash::Hash;
-use image::Luma;
+use image::{Luma, GenericImageView};
 use image::{Rgba, RgbImage};
 
 use imageproc::drawing::draw_hollow_rect_mut;
@@ -104,11 +104,25 @@ impl Application for Mot16Challenge {
             let white = Rgba([255u8, 255u8, 255u8, 255u8]);
             draw_hollow_rect_mut(&mut img, Rect::at(60, 10).of_size(200, 200), white);
 
-            let bytes = img.to_rgba8().to_vec();
+            let mut bytes = img.to_rgba8().to_vec();
             dbg!(img.width(), img.height(), bytes.len(), bytes[0], bytes[1], bytes[2], bytes[3]);
-            img.invert();
+            let w = img.width();
+            let h = img.height();
+            let mut bytes = vec![0u8; (w*h*4) as usize];
+            for y in 0..img.height() {
+                for x in 0..img.width() {
+                    let pixel = img.get_pixel(x, y);
+                    let idx: usize = y as usize * h as usize + (x as usize * 4);
+
+                    bytes[idx + 0] = pixel[2];
+                    bytes[idx + 1] = pixel[1];
+                    bytes[idx + 2] = pixel[0];
+                    bytes[idx + 3] = pixel[3];
+                }
+            }
+
             let image = Container::new(
-                Image::new(Handle::from_pixels(img.width(), img.height(), img.to_rgba8().to_vec()))
+                Image::new(Handle::from_pixels(img.width(), img.height(), bytes))
             //    Image::new(Handle::from_path(frame_path.clone()))
                             .width(Length::Fill)
                             .height(Length::Fill)

@@ -14,7 +14,14 @@ use iced::{
 };
 
 use iced_native::subscription;
+use iced_native::image::Handle;
+use polars::frame;
 use std::hash::Hash;
+use image::Luma;
+use image::{Rgba, RgbImage};
+
+use imageproc::drawing::draw_hollow_rect_mut;
+use imageproc::rect::Rect;
 
 mod util;
 
@@ -92,25 +99,50 @@ impl Application for Mot16Challenge {
         let frame_path = self.frame_path.clone();
         dbg!(&frame_path);
 
-        let image = Image::new(frame_path.clone())
-            .width(Length::Fill)
-            .height(Length::Fill);
+        if frame_path.is_file() {
+            let mut img = image::open(frame_path.clone()).unwrap();
+            let white = Rgba([255u8, 255u8, 255u8, 255u8]);
+            draw_hollow_rect_mut(&mut img, Rect::at(60, 10).of_size(200, 200), white);
 
-        let canvas = canvas::Canvas::new(self)
-            .width(Length::Fill)
-            .height(Length::Fill);
+            let bytes = img.to_rgba8().to_vec();
+            dbg!(img.width(), img.height(), bytes.len(), bytes[0], bytes[1], bytes[2], bytes[3]);
+            img.invert();
+            let image = Container::new(
+                Image::new(Handle::from_pixels(img.width(), img.height(), img.to_rgba8().to_vec()))
+            //    Image::new(Handle::from_path(frame_path.clone()))
+                            .width(Length::Fill)
+                            .height(Length::Fill)
+                )
+                .height(Length::Fill)
+                .width(Length::Fill)
+            ;
+            /*
+            let canvas = canvas::Canvas::new(self)
+                .width(Length::Fill)
+                .height(Length::Fill)
+            ;
+            */
+            let content  = Column::new()
+                .width(Length::Fill)
+                .height(Length::Fill)
+                // .push(canvas)
+                .push(image);
 
-        let content  = Column::new()
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .push(canvas)
-            .push(image);
-
-        Container::new(content)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .padding(20)
-            .into()
+            Container::new(content)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .padding(20)
+                .into()
+        } else {
+            let content = Column::new()
+                .width(Length::Fill)
+                .height(Length::Fill);
+            Container::new(content)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .padding(20)
+                .into()
+        }
     }
 }
 

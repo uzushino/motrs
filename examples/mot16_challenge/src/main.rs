@@ -97,22 +97,32 @@ impl Application for Mot16Challenge {
         self.viewer.clear();
 
         let frame_path = self.frame_path.clone();
-        dbg!(&frame_path);
-
         if frame_path.is_file() {
             let mut img = image::open(frame_path.clone()).unwrap();
             let white = Rgba([255u8, 255u8, 255u8, 255u8]);
-            draw_hollow_rect_mut(&mut img, Rect::at(60, 10).of_size(200, 200), white);
 
-            let mut bytes = img.to_rgba8().to_vec();
-            dbg!(img.width(), img.height(), bytes.len(), bytes[0], bytes[1], bytes[2], bytes[3]);
+            self.active_tracks.iter().for_each(|track| {
+                let x1 = track._box[0] as i32;
+                let y1 = track._box[1] as i32;
+                let x2 = track._box[2] as i32;
+                let y2 = track._box[3] as i32;
+
+                draw_hollow_rect_mut(
+                    &mut img,
+                    Rect::at(x1, y1).of_size((x2 - x1) as u32, (y2 - y1) as u32),
+                    white
+                );
+            });
+
+
             let w = img.width();
             let h = img.height();
             let mut bytes = vec![0u8; (w*h*4) as usize];
+
             for y in 0..img.height() {
                 for x in 0..img.width() {
                     let pixel = img.get_pixel(x, y);
-                    let idx: usize = y as usize * h as usize + (x as usize * 4);
+                    let idx: usize = y as usize * w as usize * 4 + (x as usize * 4);
 
                     bytes[idx + 0] = pixel[2];
                     bytes[idx + 1] = pixel[1];
@@ -123,19 +133,12 @@ impl Application for Mot16Challenge {
 
             let image = Container::new(
                 Image::new(Handle::from_pixels(img.width(), img.height(), bytes))
-            //    Image::new(Handle::from_path(frame_path.clone()))
                             .width(Length::Fill)
                             .height(Length::Fill)
                 )
                 .height(Length::Fill)
-                .width(Length::Fill)
-            ;
-            /*
-            let canvas = canvas::Canvas::new(self)
-                .width(Length::Fill)
-                .height(Length::Fill)
-            ;
-            */
+                .width(Length::Fill);
+
             let content  = Column::new()
                 .width(Length::Fill)
                 .height(Length::Fill)

@@ -64,7 +64,6 @@ fn read_bounds_csv(path: &std::path::Path) -> DataFrame {
         "y",
         "z"
     ]);
-    dbg!(&result);
 
     df
 }
@@ -97,10 +96,6 @@ fn read_bounds(df: &DataFrame, frame_idx: i64, drop_detection_prob: f64, add_det
 
     let mask = df.column("frame_idx").unwrap().eq(frame_idx);
     let filter_df = df.filter(&mask).unwrap();
-
-    dbg!(frame_idx);
-    println!("{}", filter_df);
-
     let mut detections = vec![];
 
     for row_idx in 0..filter_df.height() {

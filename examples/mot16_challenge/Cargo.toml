@@ -20,3 +20,4 @@ polars = { version = "*", features = ["lazy", "csv-file"] }
 polars-core = { version = "*", features = ["rows", "private"] }
 imageproc = "*"
 image = { version = "0.24.1", default-features = false, features = ["jpeg"] }
+rusttype = "*"

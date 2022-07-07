@@ -1,3 +1,5 @@
 target
 *.bk
 MOT16
+
+assets/fonts/*

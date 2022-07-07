@@ -22,6 +22,9 @@ use image::{Rgba, RgbImage};
 
 use imageproc::drawing::draw_hollow_rect_mut;
 use imageproc::rect::Rect;
+use imageproc::drawing::draw_text_mut;
+
+use rusttype::{Font, Scale};
 
 mod util;
 
@@ -101,6 +104,9 @@ impl Application for Mot16Challenge {
             let mut img = image::open(frame_path.clone()).unwrap();
             let white = Rgba([255u8, 255u8, 255u8, 255u8]);
 
+            let font = Vec::from(include_bytes!("../assets/fonts/Dela_Gothic_One/DelaGothicOne-Regular.ttf") as &[u8]);
+            let font = Font::try_from_vec(font).unwrap();
+
             self.active_tracks.iter().for_each(|track| {
                 let x1 = track._box[0] as i32;
                 let y1 = track._box[1] as i32;
@@ -111,6 +117,22 @@ impl Application for Mot16Challenge {
                     &mut img,
                     Rect::at(x1, y1).of_size((x2 - x1) as u32, (y2 - y1) as u32),
                     white
+                );
+
+                let track_text_id = format!("ID: {}", track.id);
+                let height = 12.0;
+                let scale = Scale {
+                    x: height,
+                    y: height,
+                };
+
+                draw_text_mut(
+                    &mut img,
+                    Rgba([255u8, 255u8, 255u8, 255u8]),
+                     x1, y1,
+                     scale,
+                     &font,
+                     &track_text_id
                 );
             });
 

@@ -103,6 +103,7 @@ impl Application for Mot16Challenge {
         if frame_path.is_file() {
             let mut img = image::open(frame_path.clone()).unwrap();
             let white = Rgba([255u8, 255u8, 255u8, 255u8]);
+            let red = Rgba([255u8, 0u8, 0u8, 255u8]);
 
             let font = Vec::from(include_bytes!("../assets/fonts/Dela_Gothic_One/DelaGothicOne-Regular.ttf") as &[u8]);
             let font = Font::try_from_vec(font).unwrap();
@@ -136,6 +137,20 @@ impl Application for Mot16Challenge {
                 );
             });
 
+            self.detections.iter().for_each(|detection| {
+                if let Some(b) = &detection._box {
+                    let x1 = b[0] as i32;
+                    let y1 = b[1] as i32;
+                    let x2 = b[2] as i32;
+                    let y2 = b[3] as i32;
+
+                    draw_hollow_rect_mut(
+                        &mut img,
+                        Rect::at(x1, y1).of_size((x2 - x1) as u32, (y2 - y1) as u32),
+                        red
+                    );
+                }
+            });
 
             let w = img.width();
             let h = img.height();

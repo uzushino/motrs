@@ -52,7 +52,7 @@ fn read_bounds_csv(path: &std::path::Path) -> DataFrame {
         .collect()
         .unwrap();
 
-    let result = df.set_column_names(&[
+    let _ = df.set_column_names(&[
         "frame_idx",
         "id",
         "bb_left",
@@ -149,7 +149,7 @@ pub fn read_detections(path: &std::path::Path, drop_detection_prob: f64, add_det
     let df = read_bounds_csv(&path);
     gen!({
         let max_frame = read_max_frame(&df);
-        dbg!(&max_frame);
+
         for frame_idx in 0..max_frame {
             let mut detections = read_bounds(&df, frame_idx, drop_detection_prob, add_detection_noise);
             yield_!((frame_idx, detections));

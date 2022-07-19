@@ -1,7 +1,7 @@
 use rand::distributions::Uniform;
 use rand::Rng;
 use rand_distr::{ Normal, Distribution };
-
+use genawaiter::{sync::gen, yield_};
 use nalgebra as na;
 use genawaiter::sync::{Gen, GenBoxed};
 use motrs::tracker::Detection;
@@ -200,8 +200,8 @@ pub fn data_generator(
     miss_prob: f64,
     disappear_prob: f64,
     det_err_sigma: f64,
-) -> GenBoxed<(Vec<Detection>, Vec<Detection>)> {
-    Gen::new_boxed(|co| async move {
+) -> impl Iterator<Item=(Vec<Detection>, Vec<Detection>)> {
+    gen!({
         let mut actors = (0..num_objects)
             .map(|_| {
                 Actor::new(
@@ -226,19 +226,20 @@ pub fn data_generator(
                 dets_pred.push(det_pred);
             }
 
-            co.yield_((dets_gt, dets_pred)).await;
+            yield_!((dets_gt, dets_pred));
         }
-    })
+    }).into_iter()
 }
 
 pub fn data_generator_file(
     gt: &std::path::Path,
     pred: &std::path::Path,
-) -> GenBoxed<(Vec<Detection>, Vec<Detection>)> {
+) -> impl Iterator<Item=(Vec<Detection>, Vec<Detection>)> {
+
     let mut rdr_gt = csv::Reader::from_path(gt.as_os_str()).unwrap();
     let mut rdr_pred = csv::Reader::from_path(pred.as_os_str()).unwrap();
 
-    Gen::new_boxed(|co| async move {
+    gen!({
         let mut iter1 = rdr_gt.deserialize::<(
             Option<f64>,
             Option<f64>,
@@ -316,7 +317,7 @@ pub fn data_generator_file(
                 }
             }
 
-            co.yield_((dets_gt, dets_pred)).await;
+            yield_!((dets_gt, dets_pred));
         }
-    })
+    }).into_iter()
 }

@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::env;
 use std::sync::{Arc, Mutex};
 use std::path::{Path, PathBuf};
@@ -10,7 +9,7 @@ use iced::{
     Application, Command, executor,
     Container, Element, Length, Settings,
     Rectangle, Subscription, canvas,
-    Image, Alignment, Column
+    Image, Column
 };
 
 use iced_native::subscription;

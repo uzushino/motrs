@@ -49,6 +49,7 @@ fn read_bounds_csv(path: &std::path::Path) -> DataFrame {
     let mut df = LazyCsvReader::new(path.to_string_lossy().to_string())
         .with_ignore_parser_errors(true)
         .finish()
+        .unwrap()
         .collect()
         .unwrap();
 
@@ -94,7 +95,8 @@ fn read_bounds(df: &DataFrame, frame_idx: i64, drop_detection_prob: f64, add_det
     let bb_width = df.find_idx_by_name("bb_width").unwrap();
     let bb_height = df.find_idx_by_name("bb_height").unwrap();
 
-    let mask = df.column("frame_idx").unwrap().eq(frame_idx);
+    let s: Series = Series::new("frame_idx", &[frame_idx]);
+    let mask = df.column("frame_idx").unwrap().equal(&s).unwrap();
     let filter_df = df.filter(&mask).unwrap();
     let mut detections = vec![];
 

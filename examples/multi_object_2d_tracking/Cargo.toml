@@ -7,9 +7,8 @@ version = "0.1.0"
 [dependencies]
 motrs = { path = "../.." }
 
-iced = { version = "0.4", features = ["canvas", "tokio", "debug", "image", "async-std"] }
-iced_native = "0.4"
-iced_futures = "0.3"
+iced = { version = "0.4.2", features = ["canvas", "image"] }
+iced_native = "0.5.1"
 async-std = "1.11"
 
 nalgebra = "*"
@@ -17,3 +16,7 @@ genawaiter = "0.99.1"
 rand = "*"
 rand_distr = "*"
 csv = "*"
+
+imageproc = "*"
+image = { version = "0.24.1", default-features = false, features = ["jpeg"] }
+rusttype = "*"

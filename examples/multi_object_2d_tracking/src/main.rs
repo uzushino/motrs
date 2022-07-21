@@ -1,11 +1,10 @@
 use motrs::tracker::*;
 use motrs::model::*;
-use genawaiter::sync::{Gen, GenBoxed};
 use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 
 use iced::{
-    futures, Application, Command, executor,
+    Application, Command, executor,
     Container, Element, Length, Settings, canvas::Path, Point, Size,
     canvas, Rectangle, Color, Subscription
 };
@@ -74,33 +73,6 @@ impl Application for MultiObject2dTracking {
     type Flags = ();
 
     fn new(_: Self::Flags) -> (Self, Command<Message>) {
-        let model_spec = ModelPreset::constant_acceleration_and_static_box_size_2d();
-        let min_iou = 1. / 24.;
-        let multi_match_min_iou = 1. + 1e-7;
-        let feature_similarity_fn = None;
-        let feature_similarity_beta = None;
-        let matching_fn = IOUAndFeatureMatchingFunction::new(
-            min_iou,
-            multi_match_min_iou,
-            feature_similarity_fn,
-            feature_similarity_beta,
-        );
-        let tracker = MultiObjectTracker::new(
-            0.1,
-            model_spec,
-            Some(matching_fn),
-            Some(SingleObjectTrackerKwargs {
-                max_staleness: 12.,
-                ..Default::default()
-            }),
-            None,
-            Some(ActiveTracksKwargs {
-                min_steps_alive: 2,
-                max_staleness: 6.,
-                ..Default::default()
-            })
-        );
-
         (
             Self {
                 num_steps: 1000,
@@ -130,7 +102,7 @@ impl Application for MultiObject2dTracking {
     fn subscription(&self) -> Subscription<Message> {
         worker(0, self.num_steps).map(|v| {
             match v.1 {
-                Progress::Advanced(c, active_tracks, detections) => {
+                Progress::Advanced(_, active_tracks, detections) => {
                     Message::Tracking(active_tracks, detections)
                 },
                 _ => Message::Void
@@ -224,15 +196,11 @@ impl<Message> canvas::Program<Message> for MultiObject2dTracking {
     }
 }
 
-pub struct MyTracker {
-    num_steps: usize,
-}
+pub struct MyTracker {}
 
 impl MyTracker {
     pub fn new() -> Self {
-        Self {
-            num_steps: 1000,
-        }
+        Self {}
     }
 
     pub fn create() -> MultiObjectTracker {

@@ -14,10 +14,9 @@ use iced::{
 
 use iced_native::subscription;
 use iced_native::image::Handle;
-use polars::frame;
 use std::hash::Hash;
-use image::{Luma, GenericImageView};
-use image::{Rgba, RgbImage};
+use image::GenericImageView;
+use image::Rgba;
 
 use imageproc::drawing::draw_hollow_rect_mut;
 use imageproc::rect::Rect;

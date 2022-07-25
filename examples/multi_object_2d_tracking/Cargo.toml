@@ -11,7 +11,7 @@ iced = { version = "0.4.2", features = ["canvas", "image"] }
 iced_native = "0.5.1"
 async-std = "1.11"
 
-nalgebra = "*"
+nalgebra = "0.31.0"
 genawaiter = "0.99.1"
 rand = "*"
 rand_distr = "*"

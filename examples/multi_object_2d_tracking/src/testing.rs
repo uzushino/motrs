@@ -3,7 +3,6 @@ use rand::Rng;
 use rand_distr::{ Normal, Distribution };
 use genawaiter::{sync::gen, yield_};
 use nalgebra as na;
-use genawaiter::sync::{Gen, GenBoxed};
 use motrs::tracker::Detection;
 
 const CANVAS_SIZE: i64 = 1000;

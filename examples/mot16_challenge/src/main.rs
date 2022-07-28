@@ -1,32 +1,30 @@
 use std::env;
-use std::sync::{Arc, Mutex};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
-use motrs::tracker::*;
 use motrs::model::*;
+use motrs::tracker::*;
 
 use iced::{
-    Application, Command, executor,
-    Container, Element, Length, Settings,
-    Rectangle, Subscription, canvas,
-    Image, Column
+    canvas, executor, Application, Column, Command, Container, Element, Image, Length, Rectangle,
+    Settings, Subscription,
 };
 
-use iced_native::subscription;
 use iced_native::image::Handle;
-use std::hash::Hash;
+use iced_native::subscription;
 use image::GenericImageView;
 use image::Rgba;
+use std::hash::Hash;
 
 use imageproc::drawing::draw_hollow_rect_mut;
-use imageproc::rect::Rect;
 use imageproc::drawing::draw_text_mut;
+use imageproc::rect::Rect;
 
 use rusttype::{Font, Scale};
 
 mod util;
 
-use crate::util::{ read_detections, read_video_frame, draw_rectangle };
+use crate::util::{draw_rectangle, read_detections, read_video_frame};
 
 pub fn main() -> iced::Result {
     Mot16Challenge::run(Settings {
@@ -61,7 +59,7 @@ impl Application for Mot16Challenge {
                 viewer: Default::default(),
                 active_tracks: Vec::default(),
                 detections: Vec::default(),
-                frame_path: PathBuf::default()
+                frame_path: PathBuf::default(),
             },
             Command::none(),
         )
@@ -77,20 +75,18 @@ impl Application for Mot16Challenge {
                 self.active_tracks = active_tracks;
                 self.detections = detections;
                 self.frame_path = frame;
-            },
+            }
             _ => {}
         };
         Command::none()
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        worker(0).map(|v| {
-            match v.1 {
-                Progress::Advanced(c, active_tracks, detections, frame) => {
-                    Message::Tracking(active_tracks, detections, frame)
-                },
-                _ => Message::Void
+        worker(0).map(|v| match v.1 {
+            Progress::Advanced(c, active_tracks, detections, frame) => {
+                Message::Tracking(active_tracks, detections, frame)
             }
+            _ => Message::Void,
         })
     }
 
@@ -103,7 +99,9 @@ impl Application for Mot16Challenge {
             let white = Rgba([255u8, 255u8, 255u8, 255u8]);
             let red = Rgba([255u8, 0u8, 0u8, 255u8]);
 
-            let font = Vec::from(include_bytes!("../assets/fonts/Dela_Gothic_One/DelaGothicOne-Regular.ttf") as &[u8]);
+            let font = Vec::from(include_bytes!(
+                "../assets/fonts/Dela_Gothic_One/DelaGothicOne-Regular.ttf"
+            ) as &[u8]);
             let font = Font::try_from_vec(font).unwrap();
 
             self.active_tracks.iter().for_each(|track| {
@@ -115,7 +113,7 @@ impl Application for Mot16Challenge {
                 draw_hollow_rect_mut(
                     &mut img,
                     Rect::at(x1, y1).of_size((x2 - x1) as u32, (y2 - y1) as u32),
-                    white
+                    white,
                 );
 
                 let track_text_id = format!("ID: {}", track.id);
@@ -128,10 +126,11 @@ impl Application for Mot16Challenge {
                 draw_text_mut(
                     &mut img,
                     Rgba([255u8, 255u8, 255u8, 255u8]),
-                     x1, y1,
-                     scale,
-                     &font,
-                     &track_text_id
+                    x1,
+                    y1,
+                    scale,
+                    &font,
+                    &track_text_id,
                 );
             });
 
@@ -145,14 +144,14 @@ impl Application for Mot16Challenge {
                     draw_hollow_rect_mut(
                         &mut img,
                         Rect::at(x1, y1).of_size((x2 - x1) as u32, (y2 - y1) as u32),
-                        red
+                        red,
                     );
                 }
             });
 
             let w = img.width();
             let h = img.height();
-            let mut bytes = vec![0u8; (w*h*4) as usize];
+            let mut bytes = vec![0u8; (w * h * 4) as usize];
 
             for y in 0..img.height() {
                 for x in 0..img.width() {
@@ -168,13 +167,13 @@ impl Application for Mot16Challenge {
 
             let image = Container::new(
                 Image::new(Handle::from_pixels(img.width(), img.height(), bytes))
-                            .width(Length::Fill)
-                            .height(Length::Fill)
-                )
-                .height(Length::Fill)
-                .width(Length::Fill);
+                    .width(Length::Fill)
+                    .height(Length::Fill),
+            )
+            .height(Length::Fill)
+            .width(Length::Fill);
 
-            let content  = Column::new()
+            let content = Column::new()
                 .width(Length::Fill)
                 .height(Length::Fill)
                 // .push(canvas)
@@ -186,9 +185,7 @@ impl Application for Mot16Challenge {
                 .padding(20)
                 .into()
         } else {
-            let content = Column::new()
-                .width(Length::Fill)
-                .height(Length::Fill);
+            let content = Column::new().width(Length::Fill).height(Length::Fill);
             Container::new(content)
                 .width(Length::Fill)
                 .height(Length::Fill)
@@ -202,10 +199,15 @@ impl<Message> canvas::Program<Message> for Mot16Challenge {
     fn draw(&self, bounds: Rectangle, _cursor: canvas::Cursor) -> Vec<canvas::Geometry> {
         let viewer = self.viewer.draw(bounds.size(), |frame| {
             self.active_tracks.iter().for_each(|track| {
-                let rect = (track._box[0] as usize, track._box[1] as usize, track._box[2] as usize, track._box[3] as usize);
+                let rect = (
+                    track._box[0] as usize,
+                    track._box[1] as usize,
+                    track._box[2] as usize,
+                    track._box[3] as usize,
+                );
                 draw_rectangle(frame, rect, (0, 255, 0), false);
             });
-       });
+        });
 
         vec![viewer]
     }
@@ -239,7 +241,7 @@ impl MyTracker {
                 ..Default::default()
             }),
             None,
-            None
+            None,
         );
 
         tracker
@@ -256,18 +258,19 @@ fn worker<I: 'static + Hash + Copy + Send + Sync>(id: I) -> iced::Subscription<(
 
     let dataset_root = "examples/mot16_challenge/MOT16";
     let dataset_root = env::current_dir().unwrap().join(dataset_root);
-    let dataset_root2 = format!("{}/{}/MOT16-{}", dataset_root.as_path().display().to_string(), split, seq_id);
+    let dataset_root2 = format!(
+        "{}/{}/MOT16-{}",
+        dataset_root.as_path().display().to_string(),
+        split,
+        seq_id
+    );
 
     let frames_dir = format!("{}/img1", dataset_root2);
     let _dets_path = format!("{}/{}/{}.txt", dataset_root2, sel, sel);
 
     let init_state = MyState::Ready(MyTracker::create(), 1000);
     let dets_path = std::path::Path::new(_dets_path.as_str());
-    let dets_gen = read_detections(
-            dets_path,
-            drop_detection_prob,
-            add_detection_noise
-    );
+    let dets_gen = read_detections(dets_path, drop_detection_prob, add_detection_noise);
 
     let gen = Arc::new(Mutex::new(dets_gen));
 
@@ -277,12 +280,29 @@ fn worker<I: 'static + Hash + Copy + Send + Sync>(id: I) -> iced::Subscription<(
     })
 }
 
-async fn tracking<T, I: Copy>(id: I, gen: Arc<Mutex<T>>, state: MyState, frame_dir: String) -> (Option<(I, Progress)>, MyState) where T: Iterator<Item=(i64, Vec<Detection>)> {
+async fn tracking<T, I: Copy>(
+    id: I,
+    gen: Arc<Mutex<T>>,
+    state: MyState,
+    frame_dir: String,
+) -> (Option<(I, Progress)>, MyState)
+where
+    T: Iterator<Item = (i64, Vec<Detection>)>,
+{
     match state {
-        MyState::Ready(tracker, num_steps) => {
-            (Some((id, Progress::Started)), MyState::Tracking { total: num_steps, count: 0, tracker: tracker })
-        }
-        MyState::Tracking { total, count, mut tracker,} => {
+        MyState::Ready(tracker, num_steps) => (
+            Some((id, Progress::Started)),
+            MyState::Tracking {
+                total: num_steps,
+                count: 0,
+                tracker: tracker,
+            },
+        ),
+        MyState::Tracking {
+            total,
+            count,
+            mut tracker,
+        } => {
             if count <= total {
                 if let Some((frame_idx, det_gt)) = gen.lock().unwrap().next() {
                     let target = det_gt
@@ -295,17 +315,22 @@ async fn tracking<T, I: Copy>(id: I, gen: Arc<Mutex<T>>, state: MyState, frame_d
                     let frame = read_video_frame(frame_dir_path, frame_idx as u64);
                     let active_tracks = tracker.step(target.clone());
 
-                    (Some((id, Progress::Advanced(count, active_tracks, target, frame))), MyState::Tracking{ total, count: count + 1, tracker })
+                    (
+                        Some((id, Progress::Advanced(count, active_tracks, target, frame))),
+                        MyState::Tracking {
+                            total,
+                            count: count + 1,
+                            tracker,
+                        },
+                    )
                 } else {
                     (Some((id, Progress::Finished)), MyState::Finished)
                 }
             } else {
                 (Some((id, Progress::Finished)), MyState::Finished)
             }
-        },
-        MyState::Finished => {
-            (None, MyState::Finished)
         }
+        MyState::Finished => (None, MyState::Finished),
     }
 }
 

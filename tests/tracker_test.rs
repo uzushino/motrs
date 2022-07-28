@@ -87,5 +87,9 @@ fn test_tracker_diverges() {
     assert!(mot.trackers.len() == 1);
 
     let first_track_id = mot.active_tracks(None)[0].id.clone();
-    assert_relative_eq!(mot.trackers[0].clone().lock().unwrap().model().dt, 0.1, epsilon = 1e-3f64)
+    assert_relative_eq!(
+        mot.trackers[0].clone().lock().unwrap().model().dt,
+        0.1,
+        epsilon = 1e-3f64
+    )
 }

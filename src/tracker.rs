@@ -3,12 +3,12 @@ use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use std::sync::{Arc, Mutex};
 
-use std::vec;
-use std::borrow::BorrowMut;
 use crate::filter::KalmanFilter;
 use crate::matrix::*;
 use crate::metrics::*;
 use crate::model::{Model, ModelKwargs, ModelPreset};
+use std::borrow::BorrowMut;
+use std::vec;
 
 macro_rules! array {
     ($r:expr, $c:expr, $i:expr) => {
@@ -58,7 +58,8 @@ pub struct SingleObjectTracker {
     max_staleness: f64,
 
     update_score_fn: Box<dyn Fn(f64, f64) -> f64 + Send + Sync>,
-    update_feature_fn: Box<dyn Fn(na::DMatrix<f64>, na::DMatrix<f64>) -> na::DMatrix<f64> + Send + Sync>,
+    update_feature_fn:
+        Box<dyn Fn(na::DMatrix<f64>, na::DMatrix<f64>) -> na::DMatrix<f64> + Send + Sync>,
 
     score: Option<f64>,
     pub feature: Option<na::DMatrix<f64>>,
@@ -131,7 +132,7 @@ impl SingleObjectTracker {
             feature,
             class_id,
             class_id_counts,
-            update_score_fn: exponential_moving_average_fn(kwargs.smooth_score_gamma) ,
+            update_score_fn: exponential_moving_average_fn(kwargs.smooth_score_gamma),
             update_feature_fn: exponential_moving_average_matrix_fn(kwargs.smooth_feature_gamma),
         };
 
@@ -643,7 +644,13 @@ fn cost_matrix_iou_feature(
     let mut data = Vec::new();
 
     for tracker in trackers.iter() {
-        let mut vs = tracker.lock().unwrap()._box().iter().map(|m| *m).collect::<Vec<_>>();
+        let mut vs = tracker
+            .lock()
+            .unwrap()
+            ._box()
+            .iter()
+            .map(|m| *m)
+            .collect::<Vec<_>>();
         data.append(&mut vs);
     }
 
@@ -674,7 +681,10 @@ fn cost_matrix_iou_feature(
     let mut apt_mat = iou_mat.clone();
 
     if feature_similarity_beta.is_some() {
-        let f1 = trackers.iter().map(|t| (*t).lock().unwrap()._feature()).collect::<Vec<_>>();
+        let f1 = trackers
+            .iter()
+            .map(|t| (*t).lock().unwrap()._feature())
+            .collect::<Vec<_>>();
         let f2 = detections
             .iter()
             .map(|t| t.feature.clone())

@@ -30,7 +30,7 @@ jobs:
       - run: rustup component add clippy
       - uses: ./.github/actions/cache_cargo
       - name: clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy -- -D warnings
 
   test:
     runs-on: ubuntu-latest

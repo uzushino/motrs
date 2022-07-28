@@ -1,9 +1,9 @@
+use genawaiter::{sync::gen, yield_};
+use motrs::tracker::Detection;
+use nalgebra as na;
 use rand::distributions::Uniform;
 use rand::Rng;
-use rand_distr::{ Normal, Distribution };
-use genawaiter::{sync::gen, yield_};
-use nalgebra as na;
-use motrs::tracker::Detection;
+use rand_distr::{Distribution, Normal};
 
 const CANVAS_SIZE: i64 = 1000;
 
@@ -199,7 +199,7 @@ pub fn data_generator(
     miss_prob: f64,
     disappear_prob: f64,
     det_err_sigma: f64,
-) -> impl Iterator<Item=(Vec<Detection>, Vec<Detection>)> {
+) -> impl Iterator<Item = (Vec<Detection>, Vec<Detection>)> {
     gen!({
         let mut actors = (0..num_objects)
             .map(|_| {
@@ -227,14 +227,14 @@ pub fn data_generator(
 
             yield_!((dets_gt, dets_pred));
         }
-    }).into_iter()
+    })
+    .into_iter()
 }
 
 pub fn data_generator_file(
     gt: &std::path::Path,
     pred: &std::path::Path,
-) -> impl Iterator<Item=(Vec<Detection>, Vec<Detection>)> {
-
+) -> impl Iterator<Item = (Vec<Detection>, Vec<Detection>)> {
     let mut rdr_gt = csv::Reader::from_path(gt.as_os_str()).unwrap();
     let mut rdr_pred = csv::Reader::from_path(pred.as_os_str()).unwrap();
 
@@ -318,5 +318,6 @@ pub fn data_generator_file(
 
             yield_!((dets_gt, dets_pred));
         }
-    }).into_iter()
+    })
+    .into_iter()
 }

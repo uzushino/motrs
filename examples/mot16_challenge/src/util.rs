@@ -1,16 +1,16 @@
+use genawaiter::{sync::gen, yield_};
+use motrs::tracker::Detection;
+use nalgebra as na;
+use polars::{frame, prelude::*};
 use std::env;
 use std::path::PathBuf;
-use polars::{prelude::*, frame};
-use nalgebra as na;
-use motrs::tracker::Detection;
-use genawaiter::{sync::gen, yield_};
 
-use rand::rngs::StdRng;
 use rand::distributions::Uniform;
+use rand::rngs::StdRng;
 use rand::Rng;
-use rand_distr::{ Normal, Distribution };
+use rand_distr::{Distribution, Normal};
 
-use iced::{ canvas::Path, Color, Point, Size, canvas };
+use iced::{canvas, canvas::Path, Color, Point, Size};
 
 const CANVAS_SIZE: i64 = 1000;
 
@@ -63,19 +63,14 @@ fn read_bounds_csv(path: &std::path::Path) -> DataFrame {
         // "conf",
         "x",
         "y",
-        "z"
+        "z",
     ]);
 
     df
 }
 
 fn read_max_frame(df: &DataFrame) -> i64 {
-    let max_frame = df
-        .clone()
-        .lazy()
-        .collect()
-        .unwrap()
-        .max();
+    let max_frame = df.clone().lazy().collect().unwrap().max();
 
     let frame_idx = max_frame.find_idx_by_name("frame_idx").unwrap();
     let max_frame = max_frame.get(frame_idx).unwrap();
@@ -86,7 +81,12 @@ fn read_max_frame(df: &DataFrame) -> i64 {
     }
 }
 
-fn read_bounds(df: &DataFrame, frame_idx: i64, drop_detection_prob: f64, add_detection_noise: f64) -> Vec<Detection> {
+fn read_bounds(
+    df: &DataFrame,
+    frame_idx: i64,
+    drop_detection_prob: f64,
+    add_detection_noise: f64,
+) -> Vec<Detection> {
     let seed: [u8; 32] = [13; 32];
     let mut rng: StdRng = rand::SeedableRng::from_seed(seed);
 
@@ -102,10 +102,10 @@ fn read_bounds(df: &DataFrame, frame_idx: i64, drop_detection_prob: f64, add_det
 
     for row_idx in 0..filter_df.height() {
         if random(&mut rng) < drop_detection_prob {
-            continue
+            continue;
         }
 
-        if let Some(row) = filter_df.get(row_idx){
+        if let Some(row) = filter_df.get(row_idx) {
             let mut _box = vec![
                 to_num(&row[bb_left]),
                 to_num(&row[bb_top]),
@@ -138,11 +138,15 @@ fn to_num(v: &AnyValue) -> f64 {
         AnyValue::Int16(v) => v.clone() as f64,
         AnyValue::Int32(v) => v.clone() as f64,
         AnyValue::Int64(v) => v.clone() as f64,
-        _ => 0.
+        _ => 0.,
     }
 }
 
-pub fn read_detections(path: &std::path::Path, drop_detection_prob: f64, add_detection_noise: f64) -> impl Iterator<Item=(i64, Vec<Detection>)> {
+pub fn read_detections(
+    path: &std::path::Path,
+    drop_detection_prob: f64,
+    add_detection_noise: f64,
+) -> impl Iterator<Item = (i64, Vec<Detection>)> {
     let path = env::current_dir().unwrap().join(path);
     if !path.is_file() {
         panic!()
@@ -153,13 +157,20 @@ pub fn read_detections(path: &std::path::Path, drop_detection_prob: f64, add_det
         let max_frame = read_max_frame(&df);
 
         for frame_idx in 0..max_frame {
-            let mut detections = read_bounds(&df, frame_idx, drop_detection_prob, add_detection_noise);
+            let mut detections =
+                read_bounds(&df, frame_idx, drop_detection_prob, add_detection_noise);
             yield_!((frame_idx, detections));
         }
-    }).into_iter()
+    })
+    .into_iter()
 }
 
-pub fn draw_rectangle(frame: &mut canvas::Frame, _box: (usize, usize, usize, usize), color: (u8, u8, u8), fill: bool) {
+pub fn draw_rectangle(
+    frame: &mut canvas::Frame,
+    _box: (usize, usize, usize, usize),
+    color: (u8, u8, u8),
+    fill: bool,
+) {
     let top_left = Point {
         x: _box.0 as f32,
         y: _box.1 as f32,
@@ -167,7 +178,7 @@ pub fn draw_rectangle(frame: &mut canvas::Frame, _box: (usize, usize, usize, usi
 
     let size = Size {
         width: (_box.3 as f32 - _box.1 as f32).abs(),
-        height: (_box.3 as f32 - _box.1 as f32).abs()
+        height: (_box.3 as f32 - _box.1 as f32).abs(),
     };
 
     let color = Color {
@@ -181,10 +192,13 @@ pub fn draw_rectangle(frame: &mut canvas::Frame, _box: (usize, usize, usize, usi
         let path = Path::rectangle(top_left, size);
 
         if fill {
-            frame.fill(&path, canvas::Fill {
-                color,
-                ..Default::default()
-            });
+            frame.fill(
+                &path,
+                canvas::Fill {
+                    color,
+                    ..Default::default()
+                },
+            );
         }
 
         frame.stroke(&path, canvas::Stroke::default().with_color(color));

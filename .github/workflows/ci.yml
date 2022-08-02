@@ -20,17 +20,17 @@ jobs:
       - name: fmt
         run: cargo fmt --all -- --check
 
-  clippy:
-    runs-on: ubuntu-latest
-    env:
-      RUSTC_FORCE_INCREMENTAL: 1
-    needs: build_cache
-    steps:
-      - uses: actions/checkout@v2
-      - run: rustup component add clippy
-      - uses: ./.github/actions/cache_cargo
-      - name: clippy
-        run: cargo clippy -- -D warnings
+  # clippy:
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     RUSTC_FORCE_INCREMENTAL: 1
+  #   needs: build_cache
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - run: rustup component add clippy
+  #     - uses: ./.github/actions/cache_cargo
+  #     - name: clippy
+  #       run: cargo clippy -- -D warnings
 
   test:
     runs-on: ubuntu-latest

@@ -48,6 +48,7 @@ pub fn read_video_frame(dir: &std::path::Path, frame_idx: u64) -> PathBuf {
 fn read_bounds_csv(path: &std::path::Path) -> DataFrame {
     let mut df = LazyCsvReader::new(path.to_string_lossy().to_string())
         .with_ignore_parser_errors(true)
+        .has_header(false)
         .finish()
         .unwrap()
         .collect()

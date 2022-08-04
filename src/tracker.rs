@@ -6,8 +6,7 @@ use std::sync::{Arc, Mutex};
 use crate::filter::KalmanFilter;
 use crate::matrix::*;
 use crate::metrics::*;
-use crate::model::{Model, ModelKwargs, ModelPreset};
-use std::borrow::BorrowMut;
+use crate::model::{Model, ModelKwargs};
 use std::vec;
 
 macro_rules! array {

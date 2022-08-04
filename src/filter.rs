@@ -2,8 +2,7 @@ use crate::matrix::*;
 /**
  * Refer: https://github.com/MichaelMauderer/filter-rs
  */
-use nalgebra::{DMatrix, RealField};
-use std::ops::Mul;
+use nalgebra::DMatrix;
 
 #[allow(non_snake_case)]
 #[derive(Debug)]

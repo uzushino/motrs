@@ -174,7 +174,25 @@ pub fn matrix_clip(
 
 #[cfg(test)]
 mod test {
+    use na::dmatrix;
+
     use super::*;
+
+    #[test]
+    fn test_broadcasting() {
+        let a = na::DMatrix::from_row_slice(2, 3, &[
+            2., 4., 6.,
+            8., 10., 12.
+        ]);
+        let b = na::DMatrix::from_row_slice(2, 1, &[
+            10.,
+            100.
+        ]);
+        assert!(matrix_add(&a, &b) == na::DMatrix::from_row_slice(2, 3, &[
+            12., 14., 16.,
+            108., 110., 112.
+        ]));
+    }
 
     #[test]
     fn test_matrix_to_vec() {

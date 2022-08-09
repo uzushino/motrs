@@ -7,7 +7,7 @@ jobs:
       RUSTC_FORCE_INCREMENTAL: 1
     steps:
       - uses: actions/checkout@v2
-      - uses: .github/actions/cache_cargo
+      - uses: ./.github/actions/cache_cargo
       - name: build
         run: cargo build
   fmt:
@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - run: rustup component add rustfmt
-      - uses: .github/actions/cache_cargo
+      - uses: ./.github/actions/cache_cargo
       - name: fmt
         run: cargo fmt --all -- --check
 
@@ -41,6 +41,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - uses: .github/actions/cache_cargo
+      - uses: ./.github/actions/cache_cargo
       - name: test
         run: cargo test -- --nocapture

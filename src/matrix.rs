@@ -1,6 +1,10 @@
+use std::fmt::Debug;
+
+use na::Scalar;
+use num_traits::Zero;
 use nalgebra as na;
 
-pub fn matrix_to_vec(mat: &na::DMatrix<f64>) -> Vec<f64> {
+pub fn matrix_to_vec<T: Copy>(mat: &na::DMatrix<T>) -> Vec<T> {
     let (row, col) = mat.shape();
     let mut result = Vec::default();
 
@@ -26,11 +30,13 @@ pub fn matrix_split(mat: &na::DMatrix<f64>, indecies_num: usize) -> Vec<na::DMat
     splitted
 }
 
-pub fn create_matrix_broadcasting(
+pub fn create_matrix_broadcasting<T>(
     rows: usize,
     cols: usize,
-    a: &na::DMatrix<f64>,
-) -> na::DMatrix<f64> {
+    a: &na::DMatrix<T>,
+) -> na::DMatrix<T> where
+    T: Zero + Debug + Clone + Scalar + Copy,
+{
     if a.ncols() == 1 && a.nrows() == 1 {
         na::DMatrix::from_fn(rows, cols, |_r, _c| a[(0, 0)])
     } else if a.ncols() == 1 {
@@ -40,9 +46,10 @@ pub fn create_matrix_broadcasting(
     }
 }
 
-pub fn matrix_broadcasting<F>(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>, f: F) -> na::DMatrix<f64>
+pub fn matrix_broadcasting<F, T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>, f: F) -> na::DMatrix<T>
 where
-    F: Fn(usize, usize, &na::DMatrix<f64>, &na::DMatrix<f64>) -> f64,
+    F: Fn(usize, usize, &na::DMatrix<T>, &na::DMatrix<T>) -> T,
+    T: Zero + Debug + Clone + Scalar + Copy
 {
     if a.ncols() == b.ncols() && a.nrows() == b.nrows() {
         let cols = a.ncols();
@@ -96,7 +103,8 @@ pub fn matrix_minimum(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>) -> na::DMatrix
     matrix_broadcasting(a, b, |r, c, a, b| b[(r, c)].min(a[(r, c)]))
 }
 
-pub fn matrix_add(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>) -> na::DMatrix<f64> {
+pub fn matrix_add<T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T> where
+    T: Zero + Debug + Clone + Scalar + Copy {
     matrix_broadcasting(a, b, |r, c, a, b| a[(r, c)] + b[(r, c)])
 }
 
@@ -181,16 +189,16 @@ mod test {
     #[test]
     fn test_broadcasting() {
         let a = na::DMatrix::from_row_slice(2, 3, &[
-            2., 4., 6.,
-            8., 10., 12.
+            2, 4, 6,
+            8, 10, 12
         ]);
         let b = na::DMatrix::from_row_slice(2, 1, &[
-            10.,
-            100.
+            10,
+            100
         ]);
         assert!(matrix_add(&a, &b) == na::DMatrix::from_row_slice(2, 3, &[
-            12., 14., 16.,
-            108., 110., 112.
+            12, 14, 16,
+            108, 110, 112
         ]));
     }
 

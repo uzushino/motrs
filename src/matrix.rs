@@ -17,7 +17,10 @@ pub fn matrix_to_vec<T: Copy>(mat: &na::DMatrix<T>) -> Vec<T> {
     result
 }
 
-pub fn matrix_split<T>(mat: &na::DMatrix<T>, indecies_num: usize) -> Vec<na::DMatrix<T>> where T: T: Zero + Debug + Clone + Scalar + Copy {
+pub fn matrix_split<T>(mat: &na::DMatrix<T>, indecies_num: usize) -> Vec<na::DMatrix<T>>
+where
+    T: Zero + Debug + Clone + Scalar + Copy,
+{
     let c = mat.ncols() / indecies_num;
     let r = mat.nrows() / c;
 

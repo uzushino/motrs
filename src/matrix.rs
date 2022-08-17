@@ -1,3 +1,4 @@
+use core::num;
 use std::fmt::Debug;
 
 use na::Scalar;
@@ -49,7 +50,7 @@ where
 pub fn matrix_broadcasting<F, T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>, f: F) -> na::DMatrix<T>
 where
     F: Fn(usize, usize, &na::DMatrix<T>, &na::DMatrix<T>) -> T,
-    T: Zero + Debug + Clone + Scalar + Copy,
+    T: num_traits::Num + Zero + Debug + Copy + Scalar,
 {
     if a.ncols() == b.ncols() && a.nrows() == b.nrows() {
         let cols = a.ncols();
@@ -105,20 +106,29 @@ pub fn matrix_minimum(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>) -> na::DMatrix
 
 pub fn matrix_add<T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T>
 where
-    T: Zero + Debug + Clone + Scalar + Copy,
+    T: num_traits::Num + Zero + Debug + Copy + Scalar,
 {
     matrix_broadcasting(a, b, |r, c, a, b| a[(r, c)] + b[(r, c)])
 }
 
-pub fn matrix_sub(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>) -> na::DMatrix<f64> {
+pub fn matrix_sub<T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T>
+where
+    T: num_traits::Num + Zero + Debug + Copy + Scalar,
+{
     matrix_broadcasting(a, b, |r, c, a, b| a[(r, c)] - b[(r, c)])
 }
 
-pub fn matrix_mul(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>) -> na::DMatrix<f64> {
+pub fn matrix_mul<T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T>
+where
+    T: num_traits::Num + Zero + Debug + Copy + Scalar,
+{
     matrix_broadcasting(a, b, |r, c, a, b| a[(r, c)] * b[(r, c)])
 }
 
-pub fn matrix_div(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>) -> na::DMatrix<f64> {
+pub fn matrix_div<T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T>
+where
+    T: num_traits::Num + Zero + Debug + Copy + Scalar,
+{
     matrix_broadcasting(a, b, |r, c, a, b| a[(r, c)] / b[(r, c)])
 }
 

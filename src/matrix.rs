@@ -132,35 +132,41 @@ where
     matrix_broadcasting(a, b, |r, c, a, b| a[(r, c)] / b[(r, c)])
 }
 
-pub fn matrix_dot(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>) -> na::DMatrix<f64> {
-    //if a.ncols() == 1 && b.ncols() == 1 && b.nrows() == 1 {
-    //    return matrix_mul(a, b);
-    //}
-    //if a.nrows() == 1 && b.nrows() == 1 {
-    //    return na::dmatrix![a.dot(b)];
-    //}
-
+pub fn matrix_dot<T: num_traits::Num + num_traits::Float + Debug + Scalar>(
+    a: &na::DMatrix<T>,
+    b: &na::DMatrix<T>,
+) -> na::DMatrix<T> {
     if b.nrows() == 1 {
-        let mut mat = na::DMatrix::repeat(1, a.nrows(), 0.0);
+        let mut mat: na::DMatrix<T> = na::DMatrix::repeat(1, a.nrows(), T::zero());
         for r in 0..a.nrows() {
             let mut total = 0.0;
             for c in 0..b.ncols() {
-                total += a[(r, c)] * b[(0, c)];
+                total += (a[(r, c)] * b[(0, c)]).to_f64().unwrap_or_default();
             }
-            mat[(0, r)] = total;
+            mat[(0, r)] = num_traits::NumCast::from(total).unwrap();
         }
-
         mat
     } else if b.ncols() == 1 {
         let b = create_matrix_broadcasting(b.nrows(), a.ncols(), &b);
         let dot = matrix_dot(a, &b);
         na::DMatrix::from_fn(a.nrows(), 1, |r, c| dot[(r, 0)])
     } else {
-        na::DMatrix::from_fn(a.nrows(), b.ncols(), |r, c| {
+        let mat = na::DMatrix::from_fn(a.nrows(), b.ncols(), |r, c| {
             let col = a.row(r);
             let row = b.column(c);
 
+            let col = na::DMatrix::from_fn(col.nrows(), col.ncols(), |r, c| {
+                col[(r, c)].to_f64().unwrap_or_default()
+            });
+            let row = na::DMatrix::from_fn(row.nrows(), row.ncols(), |r, c| {
+                row[(r, c)].to_f64().unwrap_or_default()
+            });
+
             (col * row).sum()
+        });
+
+        na::DMatrix::from_fn(mat.nrows(), mat.ncols(), |r, c| {
+            num_traits::NumCast::from(mat[(r, c)]).unwrap()
         })
     }
 }

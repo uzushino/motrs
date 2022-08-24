@@ -1,8 +1,9 @@
+use crate::Q_discrete_white_noise;
+use na::Scalar;
 use nalgebra as na;
 use std::cmp::max;
 use std::collections::HashMap;
-
-use crate::Q_discrete_white_noise;
+use std::fmt::Debug;
 
 pub struct ModelPreset {}
 
@@ -50,7 +51,7 @@ fn base_dim_block<'a>(dt: f64, order: usize) -> na::DMatrix<f64> {
     na::DMatrix::from(block.index((0..cutoff, 0..cutoff)))
 }
 
-fn zero_pad(arr: na::DMatrix<f64>, length: usize) -> na::DMatrix<f64> {
+fn zero_pad<T: num_traits::Num + Scalar>(arr: na::DMatrix<T>, length: usize) -> na::DMatrix<T> {
     let mut ret = na::DMatrix::zeros(1, length);
     ret.index_mut((.., ..arr.shape().1)).copy_from(&arr);
     ret

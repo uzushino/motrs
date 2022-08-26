@@ -12,7 +12,7 @@ impl ModelPreset {
         ModelPreset {}
     }
 
-    pub fn constant_velocity_and_static_box_size_2d() -> HashMap<String, f64> {
+    pub fn constant_velocity_and_static_box_size_2d() -> HashMap<String, f32> {
         let key = vec![
             String::from("order_pos"),
             String::from("dim_pos"),
@@ -26,7 +26,7 @@ impl ModelPreset {
             .collect::<HashMap<_, _>>()
     }
 
-    pub fn constant_acceleration_and_static_box_size_2d() -> HashMap<String, f64> {
+    pub fn constant_acceleration_and_static_box_size_2d() -> HashMap<String, f32> {
         let key = vec![
             String::from("order_pos"),
             String::from("dim_pos"),
@@ -42,7 +42,7 @@ impl ModelPreset {
     }
 }
 
-fn base_dim_block<'a>(dt: f64, order: usize) -> na::DMatrix<f64> {
+fn base_dim_block<'a>(dt: f32, order: usize) -> na::DMatrix<f32> {
     let block =
         na::DMatrix::from_row_slice(3, 3, &[1., dt, (dt.powf(2.)) / 2., 0., 1., dt, 0., 0., 1.]);
 
@@ -65,7 +65,7 @@ fn repeat_vec<T: Clone>(x: Vec<T>, size: usize) -> Vec<T> {
         .collect::<Vec<_>>()
 }
 
-fn block_diag(arrs: Vec<na::DMatrix<f64>>) -> na::DMatrix<f64> {
+fn block_diag(arrs: Vec<na::DMatrix<f32>>) -> na::DMatrix<f32> {
     let shapes = arrs
         .iter()
         .map(|m| {
@@ -108,21 +108,21 @@ fn block_diag(arrs: Vec<na::DMatrix<f64>>) -> na::DMatrix<f64> {
     out
 }
 
-fn eye(block: usize) -> na::DMatrix<f64> {
+fn eye(block: usize) -> na::DMatrix<f32> {
     na::DMatrix::identity(block, block)
 }
 
 pub struct Model {
-    pub dt: f64,
+    pub dt: f32,
     pub order_pos: usize,
     pub dim_pos: usize,
     pub order_size: usize,
     pub dim_size: usize,
-    pub q_var_pos: f64,
-    pub q_var_size: f64,
-    pub r_var_pos: f64,
-    pub r_var_size: f64,
-    pub p_cov_p0: f64,
+    pub q_var_pos: f32,
+    pub q_var_size: f32,
+    pub r_var_pos: f32,
+    pub r_var_size: f32,
+    pub p_cov_p0: f32,
     pub dim_box: usize,
     pub pos_idxs: Vec<usize>,
     pub size_idxs: Vec<usize>,
@@ -138,11 +138,11 @@ pub struct ModelKwargs {
     pub dim_pos: i64,
     pub order_size: i64,
     pub dim_size: i64,
-    pub q_var_pos: f64,
-    pub q_var_size: f64,
-    pub r_var_pos: f64,
-    pub r_var_size: f64,
-    pub p_cov_p0: f64,
+    pub q_var_pos: f32,
+    pub q_var_size: f32,
+    pub r_var_pos: f32,
+    pub r_var_size: f32,
+    pub p_cov_p0: f32,
 }
 
 impl Default for ModelKwargs {
@@ -162,7 +162,7 @@ impl Default for ModelKwargs {
 }
 
 impl Model {
-    pub fn new(dt: f64, kwargs: Option<ModelKwargs>) -> Self {
+    pub fn new(dt: f32, kwargs: Option<ModelKwargs>) -> Self {
         let kwargs = kwargs.unwrap_or_default();
 
         let order_pos = kwargs.order_pos as usize;
@@ -220,7 +220,7 @@ impl Model {
         (pos_idxs, size_idxs, z_in_idxs, offset_idx)
     }
 
-    pub fn build_F(&self) -> na::DMatrix<f64> {
+    pub fn build_F(&self) -> na::DMatrix<f32> {
         let block_pos = base_dim_block(self.dt, self.order_pos);
         let block_size = base_dim_block(self.dt, self.order_size);
 
@@ -238,7 +238,7 @@ impl Model {
         block_diag(diag_components)
     }
 
-    pub fn build_Q(&self) -> na::DMatrix<f64> {
+    pub fn build_Q(&self) -> na::DMatrix<f32> {
         let var_pos = self.q_var_pos;
         let var_size = self.q_var_size;
 
@@ -270,8 +270,8 @@ impl Model {
         block_diag(diag_components)
     }
 
-    pub fn build_H(&self) -> na::DMatrix<f64> {
-        fn _base_block(order: usize) -> na::DMatrix<f64> {
+    pub fn build_H(&self) -> na::DMatrix<f32> {
+        fn _base_block(order: usize) -> na::DMatrix<f32> {
             let mut diag_components = Vec::new();
 
             let a = vec![1.];
@@ -293,34 +293,34 @@ impl Model {
         block_diag(diag_components)
     }
 
-    pub fn build_P(&self) -> na::DMatrix<f64> {
+    pub fn build_P(&self) -> na::DMatrix<f32> {
         let n = eye(self.state_length);
         n * self.p_cov_p0
     }
 
-    pub fn build_R(&self) -> na::DMatrix<f64> {
+    pub fn build_R(&self) -> na::DMatrix<f32> {
         let block_pos = eye(self.dim_pos) * self.r_var_pos;
         let block_size = eye(self.dim_size) * self.r_var_size;
 
         block_diag(vec![block_pos, block_size])
     }
 
-    pub fn box_to_z(&self, _box: na::DMatrix<f64>) -> na::DMatrix<f64> {
-        let rep = _box.iter().map(|v| *v).collect::<Vec<f64>>();
+    pub fn box_to_z(&self, _box: na::DMatrix<f32>) -> na::DMatrix<f32> {
+        let rep = _box.iter().map(|v| *v).collect::<Vec<f32>>();
         let _box = na::DMatrix::from_row_slice(2, self.dim_box / 2, rep.as_slice());
         let a = _box.row_sum() / 2.0;
         let center = a.columns(0, self.dim_pos);
         let b = _box.index((1, ..)) - _box.index((0, ..));
         let length = b.columns(0, self.dim_size);
 
-        let mut result = center.iter().map(|v| *v).collect::<Vec<f64>>();
-        result.append(&mut length.iter().map(|v| *v).collect::<Vec<f64>>());
+        let mut result = center.iter().map(|v| *v).collect::<Vec<f32>>();
+        result.append(&mut length.iter().map(|v| *v).collect::<Vec<f32>>());
 
         na::DMatrix::from_row_slice(1, result.len(), result.as_slice())
     }
 
-    pub fn box_to_x(&self, _box: na::DMatrix<f64>) -> na::DMatrix<f64> {
-        let mut x: na::DMatrix<f64> = na::DMatrix::zeros(1, self.state_length);
+    pub fn box_to_x(&self, _box: na::DMatrix<f32>) -> na::DMatrix<f32> {
+        let mut x: na::DMatrix<f32> = na::DMatrix::zeros(1, self.state_length);
         let z = self.box_to_z(_box);
         for (idx, i) in self.z_in_x_ids.iter().enumerate() {
             x[*i] = z[idx];
@@ -328,7 +328,7 @@ impl Model {
         x
     }
 
-    pub fn x_to_box(&self, x: na::DMatrix<f64>) -> na::DMatrix<f64> {
+    pub fn x_to_box(&self, x: na::DMatrix<f32>) -> na::DMatrix<f32> {
         let size = max(self.dim_pos, self.dim_size);
 
         let mut xs = Vec::default();
@@ -352,12 +352,12 @@ impl Model {
         let mut result = (center.clone() - length.clone() / 2.)
             .iter()
             .map(|v| *v)
-            .collect::<Vec<f64>>();
+            .collect::<Vec<f32>>();
         result.append(
             &mut (center + length / 2.)
                 .iter()
                 .map(|v| *v)
-                .collect::<Vec<f64>>(),
+                .collect::<Vec<f32>>(),
         );
 
         na::DMatrix::from_row_slice(1, result.len(), result.as_slice())
@@ -480,7 +480,7 @@ mod test {
             ],
         );
 
-        assert_relative_eq!(F2_exp, F2, epsilon = 1e-3f64);
+        assert_relative_eq!(F2_exp, F2, epsilon = 1e-3f32);
     }
 
     #[test]
@@ -531,7 +531,7 @@ mod test {
         };
 
         let model = Model::new(0.1, Some(kwargs));
-        let _box = na::dmatrix![10f64, 10., 20., 20.];
+        let _box = na::dmatrix![10f32, 10., 20., 20.];
         let result = model.box_to_z(_box);
 
         assert!(result == na::dmatrix![15., 15., 10., 10.]);
@@ -545,7 +545,7 @@ mod test {
         };
 
         let model = Model::new(0.1, Some(kwargs));
-        let _box = na::dmatrix![10f64, 10., 0., 20., 20., 50.];
+        let _box = na::dmatrix![10f32, 10., 0., 20., 20., 50.];
         let result = model.box_to_z(_box);
 
         assert!(result == na::dmatrix![15., 15., 25., 10., 10.]);

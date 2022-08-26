@@ -42,7 +42,7 @@ fn test_test_simple_tracking_objects_1() {
                 .collect::<Vec<_>>();
             let _ = mot.step(detections);
 
-            if (i as f64) <= num_steps_warmup {
+            if (i as f32) <= num_steps_warmup {
                 continue;
             }
 
@@ -90,6 +90,6 @@ fn test_tracker_diverges() {
     assert_relative_eq!(
         mot.trackers[0].clone().lock().unwrap().model().dt,
         0.1,
-        epsilon = 1e-3f64
+        epsilon = 1e-3f32
     )
 }

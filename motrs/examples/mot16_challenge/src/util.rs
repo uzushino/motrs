@@ -18,11 +18,11 @@ pub fn rand_int<R: Rng>(rng: &mut R, min_val: i64, max_val: i64) -> i64 {
     rng.sample(Uniform::new(min_val, max_val))
 }
 
-pub fn rand_uniform<R: Rng>(rng: &mut R, min_val: f64, max_val: f64) -> f64 {
-    rng.sample::<f64, _>(Uniform::new(min_val, max_val))
+pub fn rand_uniform<R: Rng>(rng: &mut R, min_val: f32, max_val: f32) -> f32 {
+    rng.sample::<f32, _>(Uniform::new(min_val, max_val))
 }
 
-pub fn random<R: Rng>(rng: &mut R) -> f64 {
+pub fn random<R: Rng>(rng: &mut R) -> f32 {
     rng.gen()
 }
 
@@ -34,7 +34,7 @@ pub fn rand_color<R: Rng>(rng: &mut R) -> [i64; 3] {
     [r, g, b]
 }
 
-pub fn rand_guass<R: Rng>(rng: &mut R, mu: f64, sigma2: f64) -> f64 {
+pub fn rand_guass<R: Rng>(rng: &mut R, mu: f32, sigma2: f32) -> f32 {
     let normal = Normal::new(mu, sigma2.sqrt()).unwrap();
     normal.sample(rng)
 }
@@ -85,8 +85,8 @@ fn read_max_frame(df: &DataFrame) -> i64 {
 fn read_bounds(
     df: &DataFrame,
     frame_idx: i64,
-    drop_detection_prob: f64,
-    add_detection_noise: f64,
+    drop_detection_prob: f32,
+    add_detection_noise: f32,
 ) -> Vec<Detection> {
     let seed: [u8; 32] = [13; 32];
     let mut rng: StdRng = rand::SeedableRng::from_seed(seed);
@@ -134,19 +134,19 @@ fn read_bounds(
     detections
 }
 
-fn to_num(v: &AnyValue) -> f64 {
+fn to_num(v: &AnyValue) -> f32 {
     match v {
-        AnyValue::Int16(v) => v.clone() as f64,
-        AnyValue::Int32(v) => v.clone() as f64,
-        AnyValue::Int64(v) => v.clone() as f64,
+        AnyValue::Int16(v) => v.clone() as f32,
+        AnyValue::Int32(v) => v.clone() as f32,
+        AnyValue::Int64(v) => v.clone() as f32,
         _ => 0.,
     }
 }
 
 pub fn read_detections(
     path: &std::path::Path,
-    drop_detection_prob: f64,
-    add_detection_noise: f64,
+    drop_detection_prob: f32,
+    add_detection_noise: f32,
 ) -> impl Iterator<Item = (i64, Vec<Detection>)> {
     let path = env::current_dir().unwrap().join(path);
     if !path.is_file() {

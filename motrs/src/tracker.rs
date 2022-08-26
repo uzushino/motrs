@@ -18,12 +18,12 @@ macro_rules! array {
 #[derive(Debug, Clone)]
 pub struct Track {
     pub id: String,
-    pub _box: na::DMatrix<f64>,
-    pub score: Option<f64>,
+    pub _box: na::DMatrix<f32>,
+    pub score: Option<f32>,
     pub class_id: Option<i64>,
 }
 
-fn get_kalman_object_tracker(model: &Model, x0: Option<na::DMatrix<f64>>) -> KalmanFilter {
+fn get_kalman_object_tracker(model: &Model, x0: Option<na::DMatrix<f32>>) -> KalmanFilter {
     let mut tracker = KalmanFilter::new(model.state_length, model.measurement_lengths, 0);
 
     tracker.F = model.build_F();
@@ -39,45 +39,45 @@ fn get_kalman_object_tracker(model: &Model, x0: Option<na::DMatrix<f64>>) -> Kal
     tracker
 }
 
-fn exponential_moving_average_fn(gamma: f64) -> Box<dyn Fn(f64, f64) -> f64 + Send + Sync> {
-    Box::new(move |old, new| -> f64 { gamma * old + (1.0 - gamma) * new })
+fn exponential_moving_average_fn(gamma: f32) -> Box<dyn Fn(f32, f32) -> f32 + Send + Sync> {
+    Box::new(move |old, new| -> f32 { gamma * old + (1.0 - gamma) * new })
 }
 
 fn exponential_moving_average_matrix_fn(
-    gamma: f64,
-) -> Box<dyn Fn(na::DMatrix<f64>, na::DMatrix<f64>) -> na::DMatrix<f64> + Send + Sync> {
-    Box::new(move |old, new| -> na::DMatrix<f64> { gamma * old + (1.0 - gamma) * new })
+    gamma: f32,
+) -> Box<dyn Fn(na::DMatrix<f32>, na::DMatrix<f32>) -> na::DMatrix<f32> + Send + Sync> {
+    Box::new(move |old, new| -> na::DMatrix<f32> { gamma * old + (1.0 - gamma) * new })
 }
 
 pub struct SingleObjectTracker {
     id: String,
     steps_alive: i64,
     steps_positive: i64,
-    staleness: f64,
-    max_staleness: f64,
+    staleness: f32,
+    max_staleness: f32,
 
-    update_score_fn: Box<dyn Fn(f64, f64) -> f64 + Send + Sync>,
+    update_score_fn: Box<dyn Fn(f32, f32) -> f32 + Send + Sync>,
     update_feature_fn:
-        Box<dyn Fn(na::DMatrix<f64>, na::DMatrix<f64>) -> na::DMatrix<f64> + Send + Sync>,
+        Box<dyn Fn(na::DMatrix<f32>, na::DMatrix<f32>) -> na::DMatrix<f32> + Send + Sync>,
 
-    score: Option<f64>,
-    pub feature: Option<na::DMatrix<f64>>,
+    score: Option<f32>,
+    pub feature: Option<na::DMatrix<f32>>,
 
     class_id_counts: HashMap<i64, i64>,
     class_id: Option<i64>,
 }
 
-type TrackBox = na::DMatrix<f64>;
+type TrackBox = na::DMatrix<f32>;
 
 pub trait Tracker {
     fn is_invalid(&self) -> bool;
     fn is_stale(&self) -> bool;
     fn _predict(&mut self);
     fn _box(&self) -> TrackBox;
-    fn _feature(&self) -> Option<na::DMatrix<f64>>;
+    fn _feature(&self) -> Option<na::DMatrix<f32>>;
     fn update(&mut self, detection: &Detection);
 
-    fn staleness(&self) -> f64 {
+    fn staleness(&self) -> f32 {
         todo!()
     }
     fn steps_positive(&self) -> i64 {
@@ -92,7 +92,7 @@ pub trait Tracker {
     fn id(&self) -> String {
         todo!()
     }
-    fn score(&self) -> Option<f64> {
+    fn score(&self) -> Option<f32> {
         todo!()
     }
     fn class_id(&self) -> Option<i64> {
@@ -101,7 +101,7 @@ pub trait Tracker {
     fn model(&self) -> &Model {
         todo!()
     }
-    fn stale(&mut self, _rate: Option<f64>) -> f64 {
+    fn stale(&mut self, _rate: Option<f32>) -> f32 {
         todo!()
     }
 }
@@ -177,10 +177,10 @@ impl Tracker for SingleObjectTracker {
         todo!();
     }
 
-    fn _feature(&self) -> Option<na::DMatrix<f64>> {
+    fn _feature(&self) -> Option<na::DMatrix<f32>> {
         self.feature.clone()
     }
-    fn staleness(&self) -> f64 {
+    fn staleness(&self) -> f32 {
         self.staleness
     }
     fn steps_positive(&self) -> i64 {
@@ -195,13 +195,13 @@ impl Tracker for SingleObjectTracker {
     fn id(&self) -> String {
         self.id.clone()
     }
-    fn score(&self) -> Option<f64> {
+    fn score(&self) -> Option<f32> {
         self.score
     }
     fn class_id(&self) -> Option<i64> {
         self.class_id
     }
-    fn stale(&mut self, rate: Option<f64>) -> f64 {
+    fn stale(&mut self, rate: Option<f32>) -> f32 {
         let rate = rate.unwrap_or(1.0);
         self.staleness += rate;
         self.staleness
@@ -210,10 +210,10 @@ impl Tracker for SingleObjectTracker {
 
 #[derive(Clone)]
 pub struct SingleObjectTrackerKwargs {
-    pub max_staleness: f64,
-    pub smooth_score_gamma: f64,
-    pub smooth_feature_gamma: f64,
-    pub score0: Option<f64>,
+    pub max_staleness: f32,
+    pub smooth_score_gamma: f32,
+    pub smooth_feature_gamma: f32,
+    pub score0: Option<f32>,
     pub class_id0: Option<i64>,
 }
 
@@ -236,7 +236,7 @@ impl Default for SingleObjectTracker {
 }
 
 pub struct KalmanTracker {
-    model_kwargs: (f64, Option<ModelKwargs>),
+    model_kwargs: (f32, Option<ModelKwargs>),
     model: Model,
 
     _tracker: KalmanFilter,
@@ -245,7 +245,7 @@ pub struct KalmanTracker {
 
 #[derive(Clone)]
 pub struct KalmanFilterKwargs {
-    x0: Option<na::DMatrix<f64>>,
+    x0: Option<na::DMatrix<f32>>,
     box0: Option<TrackBox>,
     model_kwargs: Option<ModelKwargs>,
     kwargs: Option<SingleObjectTrackerKwargs>,
@@ -253,9 +253,9 @@ pub struct KalmanFilterKwargs {
 
 impl KalmanTracker {
     pub fn new(
-        x0: Option<na::DMatrix<f64>>,
+        x0: Option<na::DMatrix<f32>>,
         box0: Option<TrackBox>,
-        model_kwargs: (f64, Option<ModelKwargs>),
+        model_kwargs: (f32, Option<ModelKwargs>),
         kwargs: Option<SingleObjectTrackerKwargs>,
     ) -> Self {
         let model = Model::new(model_kwargs.0, model_kwargs.1.clone());
@@ -279,8 +279,8 @@ impl KalmanTracker {
         self._tracker.update(&z, None, None);
     }
 
-    fn unstale(&mut self, rate: Option<f64>) -> f64 {
-        self._base.staleness = 0_f64.max(self._base.staleness - rate.unwrap_or(2.));
+    fn unstale(&mut self, rate: Option<f32>) -> f32 {
+        self._base.staleness = 0_f32.max(self._base.staleness - rate.unwrap_or(2.));
         self._base.staleness
     }
 }
@@ -317,10 +317,10 @@ impl Tracker for KalmanTracker {
         self.unstale(Some(3.));
     }
 
-    fn _feature(&self) -> Option<na::DMatrix<f64>> {
+    fn _feature(&self) -> Option<na::DMatrix<f32>> {
         self._base.feature.clone()
     }
-    fn staleness(&self) -> f64 {
+    fn staleness(&self) -> f32 {
         self._base.staleness()
     }
     fn steps_positive(&self) -> i64 {
@@ -332,7 +332,7 @@ impl Tracker for KalmanTracker {
     fn id(&self) -> String {
         self._base.id()
     }
-    fn score(&self) -> Option<f64> {
+    fn score(&self) -> Option<f32> {
         self._base.score()
     }
     fn class_id(&self) -> Option<i64> {
@@ -341,7 +341,7 @@ impl Tracker for KalmanTracker {
     fn model(&self) -> &Model {
         &self.model
     }
-    fn stale(&mut self, rate: Option<f64>) -> f64 {
+    fn stale(&mut self, rate: Option<f32>) -> f32 {
         self._base.stale(rate)
     }
 }
@@ -351,25 +351,25 @@ trait BaseMatchingFunction {
         &self,
         trackers: &Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
         detections: &Vec<Detection>,
-    ) -> na::DMatrix<f64>;
+    ) -> na::DMatrix<f32>;
 }
 
 pub struct IOUAndFeatureMatchingFunction {
-    pub min_iou: f64,
-    pub multi_match_min_iou: f64,
+    pub min_iou: f32,
+    pub multi_match_min_iou: f32,
     pub feature_similarity_fn:
-        Option<Box<dyn FnOnce(Vec<na::DMatrix<f64>>, Vec<na::DMatrix<f64>>) -> f64 + Send + Sync>>,
-    pub feature_similarity_beta: Option<f64>,
+        Option<Box<dyn FnOnce(Vec<na::DMatrix<f32>>, Vec<na::DMatrix<f32>>) -> f32 + Send + Sync>>,
+    pub feature_similarity_beta: Option<f32>,
 }
 
 impl IOUAndFeatureMatchingFunction {
     pub fn new(
-        min_iou: f64,
-        multi_match_min_iou: f64,
+        min_iou: f32,
+        multi_match_min_iou: f32,
         feature_similarity_fn: Option<
-            Box<dyn FnOnce(Vec<na::DMatrix<f64>>, Vec<na::DMatrix<f64>>) -> f64 + Send + Sync>,
+            Box<dyn FnOnce(Vec<na::DMatrix<f32>>, Vec<na::DMatrix<f32>>) -> f32 + Send + Sync>,
         >,
-        feature_similarity_beta: Option<f64>,
+        feature_similarity_beta: Option<f32>,
     ) -> Self {
         Self {
             min_iou,
@@ -396,7 +396,7 @@ impl BaseMatchingFunction for IOUAndFeatureMatchingFunction {
         &self,
         trackers: &Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
         detections: &Vec<Detection>,
-    ) -> na::DMatrix<f64> {
+    ) -> na::DMatrix<f32> {
         match_by_cost_matrix(
             trackers,
             detections,
@@ -410,10 +410,10 @@ impl BaseMatchingFunction for IOUAndFeatureMatchingFunction {
 
 #[derive(Clone, Debug)]
 pub struct Detection {
-    pub score: f64,
+    pub score: f32,
     pub class_id: i64,
-    pub _box: Option<na::DMatrix<f64>>,
-    pub feature: Option<na::DMatrix<f64>>,
+    pub _box: Option<na::DMatrix<f32>>,
+    pub feature: Option<na::DMatrix<f32>>,
 }
 
 impl Default for Detection {
@@ -429,8 +429,8 @@ impl Default for Detection {
 
 #[derive(Clone)]
 pub struct ActiveTracksKwargs {
-    pub max_staleness_to_positive_ratio: f64,
-    pub max_staleness: f64,
+    pub max_staleness_to_positive_ratio: f32,
+    pub max_staleness: f32,
     pub min_steps_alive: i64,
 }
 
@@ -448,19 +448,19 @@ pub struct MultiObjectTracker {
     pub trackers: Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
     tracker_kwargs: Option<SingleObjectTrackerKwargs>,
     matching_fn: Option<IOUAndFeatureMatchingFunction>,
-    matching_fn_kwargs: HashMap<String, f64>,
+    matching_fn_kwargs: HashMap<String, f32>,
     active_tracks_kwargs: Option<ActiveTracksKwargs>,
     detections_matched_ids: Vec<String>,
-    model_kwargs: (f64, Option<ModelKwargs>),
+    model_kwargs: (f32, Option<ModelKwargs>),
 }
 
 impl MultiObjectTracker {
     pub fn new(
-        dt: f64,
-        model_spec: HashMap<String, f64>,
+        dt: f32,
+        model_spec: HashMap<String, f32>,
         matching_fn: Option<IOUAndFeatureMatchingFunction>,
         tracker_kwargs: Option<SingleObjectTrackerKwargs>,
-        matching_fn_kwargs: Option<HashMap<String, f64>>,
+        matching_fn_kwargs: Option<HashMap<String, f32>>,
         active_tracks_kwargs: Option<ActiveTracksKwargs>,
     ) -> Self {
         let model_kwards = ModelKwargs {
@@ -484,8 +484,8 @@ impl MultiObjectTracker {
 
     fn tracker_clss(
         &self,
-        x0: Option<na::DMatrix<f64>>,
-        box0: Option<na::DMatrix<f64>>,
+        x0: Option<na::DMatrix<f32>>,
+        box0: Option<na::DMatrix<f32>>,
         det: Detection,
     ) -> Mutex<impl Tracker + Send + Sync> {
         let mut kwargs = self.tracker_kwargs.clone().unwrap_or_default();
@@ -610,7 +610,7 @@ impl MultiObjectTracker {
 
         for tracker in self.trackers.iter() {
             let tr = tracker.lock().unwrap();
-            let cond1 = tr.staleness() / (tr.steps_positive() as f64)
+            let cond1 = tr.staleness() / (tr.steps_positive() as f32)
                 < kwargs.max_staleness_to_positive_ratio;
             let cond2 = tr.staleness() < kwargs.max_staleness;
             let cond3 = tr.steps_alive() >= kwargs.min_steps_alive;
@@ -634,10 +634,10 @@ fn cost_matrix_iou_feature(
     trackers: &Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
     detections: &Vec<Detection>,
     feature_similarity_fn: Option<
-        Box<dyn FnOnce(Vec<na::DMatrix<f64>>, Vec<na::DMatrix<f64>>) -> f64>,
+        Box<dyn FnOnce(Vec<na::DMatrix<f32>>, Vec<na::DMatrix<f32>>) -> f32>,
     >,
-    feature_similarity_beta: Option<f64>,
-) -> (na::DMatrix<f64>, na::DMatrix<f64>) {
+    feature_similarity_beta: Option<f32>,
+) -> (na::DMatrix<f32>, na::DMatrix<f32>) {
     let r1 = trackers.len();
     let c1 = (trackers.first()).unwrap().lock().unwrap()._box().shape().1;
     let mut data = Vec::new();
@@ -712,13 +712,13 @@ fn cost_matrix_iou_feature(
 pub fn match_by_cost_matrix(
     trackers: &Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
     detections: &Vec<Detection>,
-    min_iou: f64,
-    multi_match_min_iou: f64,
+    min_iou: f32,
+    multi_match_min_iou: f32,
     feature_similarity_fn: Option<
-        Box<dyn FnOnce(Vec<na::DMatrix<f64>>, Vec<na::DMatrix<f64>>) -> f64>,
+        Box<dyn FnOnce(Vec<na::DMatrix<f32>>, Vec<na::DMatrix<f32>>) -> f32>,
     >,
-    feature_similarity_beta: Option<f64>,
-) -> na::DMatrix<f64> {
+    feature_similarity_beta: Option<f32>,
+) -> na::DMatrix<f32> {
     if trackers.len() == 0 || detections.len() == 0 {
         return array!(0, 0, &[]);
     }
@@ -746,7 +746,7 @@ pub fn match_by_cost_matrix(
         }
     }
 
-    let ret = na::DMatrix::from_fn(matches.len(), matches[0].len(), |r, c| matches[r][c] as f64);
+    let ret = na::DMatrix::from_fn(matches.len(), matches[0].len(), |r, c| matches[r][c] as f32);
 
     ret
 }

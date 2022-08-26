@@ -96,11 +96,11 @@ where
     }
 }
 
-pub fn matrix_maximum(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>) -> na::DMatrix<f64> {
+pub fn matrix_maximum(a: &na::DMatrix<f32>, b: &na::DMatrix<f32>) -> na::DMatrix<f32> {
     matrix_broadcasting(a, b, |r, c, a, b| b[(r, c)].max(a[(r, c)]))
 }
 
-pub fn matrix_minimum(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>) -> na::DMatrix<f64> {
+pub fn matrix_minimum(a: &na::DMatrix<f32>, b: &na::DMatrix<f32>) -> na::DMatrix<f32> {
     matrix_broadcasting(a, b, |r, c, a, b| b[(r, c)].min(a[(r, c)]))
 }
 
@@ -141,7 +141,7 @@ pub fn matrix_dot<T: num_traits::Num + num_traits::Float + Debug + Scalar>(
         for r in 0..a.nrows() {
             let mut total = 0.0;
             for c in 0..b.ncols() {
-                total += (a[(r, c)] * b[(0, c)]).to_f64().unwrap_or_default();
+                total += (a[(r, c)] * b[(0, c)]).to_f32().unwrap_or_default();
             }
             mat[(0, r)] = num_traits::NumCast::from(total).unwrap();
         }
@@ -156,10 +156,10 @@ pub fn matrix_dot<T: num_traits::Num + num_traits::Float + Debug + Scalar>(
             let row = b.column(c);
 
             let col = na::DMatrix::from_fn(col.nrows(), col.ncols(), |r, c| {
-                col[(r, c)].to_f64().unwrap_or_default()
+                col[(r, c)].to_f32().unwrap_or_default()
             });
             let row = na::DMatrix::from_fn(row.nrows(), row.ncols(), |r, c| {
-                row[(r, c)].to_f64().unwrap_or_default()
+                row[(r, c)].to_f32().unwrap_or_default()
             });
 
             (col * row).sum()
@@ -172,10 +172,10 @@ pub fn matrix_dot<T: num_traits::Num + num_traits::Float + Debug + Scalar>(
 }
 
 pub fn matrix_clip(
-    mat: &na::DMatrix<f64>,
-    min_value: Option<f64>,
-    max_value: Option<f64>,
-) -> na::DMatrix<f64> {
+    mat: &na::DMatrix<f32>,
+    min_value: Option<f32>,
+    max_value: Option<f32>,
+) -> na::DMatrix<f32> {
     let cols = mat.ncols();
     let rows = mat.nrows();
 

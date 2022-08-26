@@ -11,8 +11,8 @@ pub fn rand_int<R: Rng>(rng: &mut R, min_val: i64, max_val: i64) -> i64 {
     rng.sample(Uniform::new(min_val, max_val))
 }
 
-pub fn rand_uniform<R: Rng>(rng: &mut R, min_val: f64, max_val: f64) -> f64 {
-    rng.sample::<f64, _>(Uniform::new(min_val, max_val))
+pub fn rand_uniform<R: Rng>(rng: &mut R, min_val: f32, max_val: f32) -> f32 {
+    rng.sample::<f32, _>(Uniform::new(min_val, max_val))
 }
 
 pub fn rand_color<R: Rng>(rng: &mut R) -> [i64; 3] {
@@ -23,24 +23,24 @@ pub fn rand_color<R: Rng>(rng: &mut R) -> [i64; 3] {
     [r, g, b]
 }
 
-pub fn rand_guass<R: Rng>(rng: &mut R, mu: f64, sigma2: f64) -> f64 {
+pub fn rand_guass<R: Rng>(rng: &mut R, mu: f32, sigma2: f32) -> f32 {
     let normal = Normal::new(mu, sigma2.sqrt()).unwrap();
     normal.sample(rng)
 }
 
 struct Actor {
-    pub max_omega: f64,
-    pub miss_prob: f64,
-    pub disappear_prob: f64,
-    pub det_err_sigma: f64,
+    pub max_omega: f32,
+    pub miss_prob: f32,
+    pub disappear_prob: f32,
+    pub det_err_sigma: f32,
     pub canvas_size: i64,
     pub class_id: i64,
 
     pub width: i64,
     pub height: i64,
 
-    pub omega_x: f64,
-    pub omega_y: f64,
+    pub omega_x: f32,
+    pub omega_y: f32,
     pub fi_x: i64,
     pub fi_y: i64,
 
@@ -50,10 +50,10 @@ struct Actor {
 
 impl Actor {
     pub fn new(
-        max_omega: f64,
-        miss_prob: f64,
-        disappear_prob: f64,
-        det_err_sigma: f64,
+        max_omega: f32,
+        miss_prob: f32,
+        disappear_prob: f32,
+        det_err_sigma: f32,
         canvas_size: i64,
         color: Option<[i64; 3]>,
     ) -> Self {
@@ -100,10 +100,10 @@ impl Actor {
         }
     }
 
-    fn position_at(&self, step: i64) -> (f64, f64) {
-        let half = (self.canvas_size as f64) / 2. - 50.;
-        let x = half * (self.omega_x * (step as f64) + (self.fi_x as f64)).cos() + half;
-        let y = half * (self.omega_y * (step as f64) + (self.fi_y as f64)).cos() + half;
+    fn position_at(&self, step: i64) -> (f32, f32) {
+        let half = (self.canvas_size as f32) / 2. - 50.;
+        let x = half * (self.omega_x * (step as f32) + (self.fi_x as f32)).cos() + half;
+        let y = half * (self.omega_y * (step as f32) + (self.fi_y as f32)).cos() + half;
 
         (x, y)
     }
@@ -114,10 +114,10 @@ impl Actor {
         let box_gt = [
             xmin,
             ymin,
-            xmin + (self.width as f64),
-            ymin + (self.height as f64),
+            xmin + (self.width as f32),
+            ymin + (self.height as f32),
         ];
-        let mut box_pred = if rng.gen::<f64>() < self.miss_prob {
+        let mut box_pred = if rng.gen::<f32>() < self.miss_prob {
             None
         } else {
             let _pred = box_gt
@@ -127,7 +127,7 @@ impl Actor {
             Some(_pred)
         };
 
-        if rng.gen::<f64>() < self.disappear_prob {
+        if rng.gen::<f32>() < self.disappear_prob {
             self.disappear_steps = rand_int(&mut rng, 1, 24);
         }
 
@@ -140,13 +140,13 @@ impl Actor {
             _box: Some(na::DMatrix::from_row_slice(1, 4, &box_gt)),
             score: 1.,
             class_id: self.class_id,
-            feature: Some(na::DMatrix::from_fn(1, 3, |r, c| self.color[c] as f64)),
+            feature: Some(na::DMatrix::from_fn(1, 3, |r, c| self.color[c] as f32)),
         };
 
         let feature_pred = self
             .color
             .iter()
-            .map(|v| rand_guass(&mut rng, 0., 5.) + (*v as f64))
+            .map(|v| rand_guass(&mut rng, 0., 5.) + (*v as f32))
             .collect::<Vec<_>>();
 
         let det_pred = if box_pred.is_some() {
@@ -195,10 +195,10 @@ impl Default for Actor {
 pub fn data_generator(
     num_steps: i64,
     num_objects: i64,
-    max_omega: f64,
-    miss_prob: f64,
-    disappear_prob: f64,
-    det_err_sigma: f64,
+    max_omega: f32,
+    miss_prob: f32,
+    disappear_prob: f32,
+    det_err_sigma: f32,
 ) -> impl Iterator<Item = (Vec<Detection>, Vec<Detection>)> {
     gen!({
         let mut actors = (0..num_objects)
@@ -240,26 +240,26 @@ pub fn data_generator_file(
 
     gen!({
         let mut iter1 = rdr_gt.deserialize::<(
-            Option<f64>,
-            Option<f64>,
-            Option<f64>,
-            Option<f64>,
-            f64,
-            f64,
-            f64,
+            Option<f32>,
+            Option<f32>,
+            Option<f32>,
+            Option<f32>,
+            f32,
+            f32,
+            f32,
             i64,
-            f64,
+            f32,
         )>();
         let mut iter2 = rdr_pred.deserialize::<(
-            Option<f64>,
-            Option<f64>,
-            Option<f64>,
-            Option<f64>,
-            f64,
-            f64,
-            f64,
-            f64,
-            f64,
+            Option<f32>,
+            Option<f32>,
+            Option<f32>,
+            Option<f32>,
+            f32,
+            f32,
+            f32,
+            f32,
+            f32,
         )>();
 
         for j in 0..2000 {

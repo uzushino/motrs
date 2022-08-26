@@ -1,0 +1,22 @@
+[package]
+name = "motrs"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+nalgebra = "0.31.1"
+uuid = { version = "0.8.1", features = ["serde", "v4"] }
+approx = "0.5.1"
+ordered-float = "2.0"
+rand = "0.8.5"
+fixedbitset = "0.3"
+num-traits = "0.2"
+
+[dev-dependencies]
+assert_approx_eq = "1.1.0"
+genawaiter = "0.99.1"
+csv = "1.1.6"
+rand_distr = "0.4.3"
+

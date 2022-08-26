@@ -7,10 +7,10 @@ use crate::assignment::minimize;
 use crate::matrix::*;
 
 pub fn calculate_iou(
-    bboxes1: na::DMatrix<f64>,
-    bboxes2: na::DMatrix<f64>,
+    bboxes1: na::DMatrix<f32>,
+    bboxes2: na::DMatrix<f32>,
     dim: usize,
-) -> na::DMatrix<f64> {
+) -> na::DMatrix<f32> {
     let r = bboxes1.nrows();
     let bboxes1 = bboxes1.reshape_generic(Dynamic::new(r), Dynamic::new(dim * 2));
 
@@ -20,20 +20,20 @@ pub fn calculate_iou(
     let coords_b1 = matrix_split(&bboxes1, 2 * dim);
     let coords_b2 = matrix_split(&bboxes2, 2 * dim);
 
-    let mut coords1: Vec<na::DMatrix<f64>> = Vec::default();
+    let mut coords1: Vec<na::DMatrix<f32>> = Vec::default();
     for _ in 0..dim {
         coords1.push(na::DMatrix::zeros(bboxes1.nrows(), bboxes2.nrows()));
     }
 
-    let mut coords2: Vec<na::DMatrix<f64>> = Vec::default();
+    let mut coords2: Vec<na::DMatrix<f32>> = Vec::default();
     for _ in 0..dim {
         coords2.push(na::DMatrix::zeros(bboxes1.nrows(), bboxes2.nrows()));
     }
 
     let zero = na::DMatrix::zeros(1, 1);
-    let mut val_inter: na::DMatrix<f64> = na::DMatrix::repeat(1, 1, 1.);
-    let mut val_b1: na::DMatrix<f64> = na::DMatrix::repeat(1, 1, 1.);
-    let mut val_b2: na::DMatrix<f64> = na::DMatrix::repeat(1, 1, 1.);
+    let mut val_inter: na::DMatrix<f32> = na::DMatrix::repeat(1, 1, 1.);
+    let mut val_b1: na::DMatrix<f32> = na::DMatrix::repeat(1, 1, 1.);
+    let mut val_b2: na::DMatrix<f32> = na::DMatrix::repeat(1, 1, 1.);
 
     for d in 0..dim {
         coords1[d] = matrix_maximum(&coords_b1[d], &coords_b2[d].transpose());
@@ -63,11 +63,11 @@ pub fn calculate_iou(
     iou
 }
 
-pub fn _sequence_has_none(seq: &Vec<Option<na::DMatrix<f64>>>) -> bool {
+pub fn _sequence_has_none(seq: &Vec<Option<na::DMatrix<f32>>>) -> bool {
     seq.iter().any(|v| v.is_none())
 }
 
-pub fn cosine_distance(vector1: &na::DMatrix<f64>, vector2: &na::DMatrix<f64>) -> f64 {
+pub fn cosine_distance(vector1: &na::DMatrix<f32>, vector2: &na::DMatrix<f32>) -> f32 {
     let norm = vector1.dot(vector1) * vector2.dot(vector2);
 
     if norm > 0.0 {
@@ -78,9 +78,9 @@ pub fn cosine_distance(vector1: &na::DMatrix<f64>, vector2: &na::DMatrix<f64>) -
 }
 
 pub fn angular_similarity(
-    vector1: na::DMatrix<f64>,
-    vector2: na::DMatrix<f64>,
-) -> na::DMatrix<f64> {
+    vector1: na::DMatrix<f32>,
+    vector2: na::DMatrix<f32>,
+) -> na::DMatrix<f32> {
     let mut result = na::DMatrix::zeros(vector1.nrows(), 1);
 
     for row in 0..vector1.nrows() {
@@ -91,7 +91,7 @@ pub fn angular_similarity(
     result
 }
 
-pub fn linear_sum_assignment(mat: &na::DMatrix<f64>) -> (Vec<usize>, Vec<usize>) {
+pub fn linear_sum_assignment(mat: &na::DMatrix<f32>) -> (Vec<usize>, Vec<usize>) {
     let height = mat.nrows();
     let width = mat.ncols();
     let mut matrix = vec![];
@@ -129,7 +129,7 @@ mod test {
         let b2 = na::DMatrix::from_row_slice(2, 2, &[10., 21., 30., 40.]);
         let iou_1d = calculate_iou(b1, b2, 1);
 
-        assert_relative_eq!(iou_1d, dmatrix![0.9091, 0.], epsilon = 1e-3f64);
+        assert_relative_eq!(iou_1d, dmatrix![0.9091, 0.], epsilon = 1e-3f32);
 
         let b1 = na::DMatrix::from_row_slice(2, 4, &[20.1, 20.1, 30.1, 30.1, 15., 15., 25., 25.]);
         let b2 = na::DMatrix::from_row_slice(1, 4, &[10., 10., 20., 20.]);
@@ -138,7 +138,7 @@ mod test {
         assert_relative_eq!(
             iou_2d,
             na::DMatrix::from_row_slice(2, 1, &[0., 0.1429]),
-            epsilon = 1e-3f64
+            epsilon = 1e-3f32
         );
 
         let b1 = na::DMatrix::from_row_slice(1, 6, &[10., 10., 10., 20., 20., 20.]);
@@ -154,7 +154,7 @@ mod test {
         assert_relative_eq!(
             iou_3d,
             na::DMatrix::from_row_slice(1, 2, &[0.7811, 0.]),
-            epsilon = 1e-3f64
+            epsilon = 1e-3f32
         );
     }
 
@@ -167,7 +167,7 @@ mod test {
         let actual = angular_similarity(a, b);
         let expect = na::DMatrix::from_row_slice(2, 1, &[0.99452275, 0.99916559]);
 
-        assert_relative_eq!(expect, actual, epsilon = 1e-3f64);
+        assert_relative_eq!(expect, actual, epsilon = 1e-3f32);
     }
 
     #[test]

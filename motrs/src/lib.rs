@@ -12,11 +12,11 @@ use crate::tracker::Track;
 
 pub fn Q_discrete_white_noise(
     dim: usize,
-    dt: f64,
-    var: f64,
+    dt: f32,
+    var: f32,
     block_size: usize,
     order_by_dim: bool,
-) -> na::DMatrix<f64> {
+) -> na::DMatrix<f32> {
     if !vec![2, 3, 4].contains(&dim) {
         panic!();
     }
@@ -56,9 +56,9 @@ pub fn Q_discrete_white_noise(
     order_by_derivative(Q, dim, block_size) * var
 }
 
-fn order_by_derivative(q: Vec<Vec<f64>>, dim: usize, block_size: usize) -> na::DMatrix<f64> {
+fn order_by_derivative(q: Vec<Vec<f32>>, dim: usize, block_size: usize) -> na::DMatrix<f32> {
     let n = dim * block_size;
-    let mut d = na::DMatrix::<f64>::zeros(n, n);
+    let mut d = na::DMatrix::<f32>::zeros(n, n);
 
     for (i, x) in q.iter().flatten().enumerate() {
         let f = na::DMatrix::identity(block_size, block_size) * *x;

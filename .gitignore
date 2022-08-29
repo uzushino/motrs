@@ -16,3 +16,11 @@ Cargo.lock
 *.jpg
 
 .DS_Store
+
+/target
+
+data/*
+!data/.gitkeep
+
+node_modules
+little_annoy/target

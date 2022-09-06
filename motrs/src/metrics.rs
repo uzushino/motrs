@@ -13,14 +13,12 @@ pub fn calculate_iou(
 ) -> na::DMatrix<f32> {
     let r = bboxes1.nrows();
     let bboxes1 = bboxes1.reshape_generic(Dynamic::new(r), Dynamic::new(dim * 2));
-
     let r = bboxes2.nrows();
     let bboxes2 = bboxes2.reshape_generic(Dynamic::new(r), Dynamic::new(dim * 2));
-
     let coords_b1 = matrix_split(&bboxes1, 2 * dim);
     let coords_b2 = matrix_split(&bboxes2, 2 * dim);
-
     let mut coords1: Vec<na::DMatrix<f32>> = Vec::default();
+
     for _ in 0..dim {
         coords1.push(na::DMatrix::zeros(bboxes1.nrows(), bboxes2.nrows()));
     }

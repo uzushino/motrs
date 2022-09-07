@@ -110,7 +110,7 @@ impl SingleObjectTracker {
     pub fn new_with_kwargs(kwargs: Option<SingleObjectTrackerKwargs>) -> Self {
         let kwargs = kwargs.unwrap_or_default();
 
-        let id = uuid::Uuid::new_v4().to_hyphenated().to_string();
+        let id = uuid::Uuid::new_v4().hyphenated().to_string();
         let steps_alive = 1;
         let steps_positive = 1;
         let staleness = 0.0;

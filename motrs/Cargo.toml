@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 nalgebra = "0.31.1"
-uuid = { version = "0.8.1", features = ["serde", "v4"] }
+uuid = { version = "1.1.2", features = ["serde", "v4"] }
 approx = "0.5.1"
 ordered-float = "2.0"
 rand = "0.8.5"

@@ -245,14 +245,12 @@ impl Model {
         let q_pos = if self.order_pos == 0 {
             na::dmatrix![var_pos]
         } else {
-            // dim=self.order_pos + 1, dt=self.dt, var=var_pos
             Q_discrete_white_noise(self.order_pos + 1, self.dt, var_pos, 1, true)
         };
 
         let q_size = if self.order_size == 0 {
             na::dmatrix![var_size]
         } else {
-            // dim=self.order_pos + 1, dt=self.dt, var=var_pos
             Q_discrete_white_noise(self.order_size + 1, self.dt, var_size, 1, true)
         };
 
@@ -503,7 +501,7 @@ mod test {
 
         assert!(box_ret == _box);
 
-        let mut kwargs = ModelKwargs {
+        let kwargs = ModelKwargs {
             order_pos: 1,
             dim_pos: 3,
             order_size: 0,
@@ -522,7 +520,7 @@ mod test {
 
     #[test]
     fn test_box_to_z() {
-        let mut kwargs = ModelKwargs {
+        let kwargs = ModelKwargs {
             order_pos: 1,
             dim_pos: 2,
             order_size: 0,

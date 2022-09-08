@@ -65,30 +65,6 @@ pub fn _sequence_has_none(seq: &Vec<Option<na::DMatrix<f32>>>) -> bool {
     seq.iter().any(|v| v.is_none())
 }
 
-pub fn cosine_distance(vector1: &na::DMatrix<f32>, vector2: &na::DMatrix<f32>) -> f32 {
-    let norm = vector1.dot(vector1) * vector2.dot(vector2);
-
-    if norm > 0.0 {
-        return 1. - vector1.dot(vector2) / norm.sqrt();
-    }
-
-    0.0
-}
-
-pub fn angular_similarity(
-    vector1: na::DMatrix<f32>,
-    vector2: na::DMatrix<f32>,
-) -> na::DMatrix<f32> {
-    let mut result = na::DMatrix::zeros(vector1.nrows(), 1);
-
-    for row in 0..vector1.nrows() {
-        let mat = na::DMatrix::from(vector1.rows(row, 1));
-        result[(row, 0)] = 1. - (cosine_distance(&mat, &vector2) / 2.);
-    }
-
-    result
-}
-
 pub fn linear_sum_assignment(mat: &na::DMatrix<f32>) -> (Vec<usize>, Vec<usize>) {
     let height = mat.nrows();
     let width = mat.ncols();
@@ -154,18 +130,6 @@ mod test {
             na::DMatrix::from_row_slice(1, 2, &[0.7811, 0.]),
             epsilon = 1e-3f32
         );
-    }
-
-    #[test]
-    fn test_anguler_similarity() {
-        let a = na::DMatrix::from_row_slice(2, 3, &[11., 136., 234., 44., 159., 201.]);
-
-        let b = na::DMatrix::from_row_slice(1, 3, &[30., 160., 208.]);
-
-        let actual = angular_similarity(a, b);
-        let expect = na::DMatrix::from_row_slice(2, 1, &[0.99452275, 0.99916559]);
-
-        assert_relative_eq!(expect, actual, epsilon = 1e-3f32);
     }
 
     #[test]

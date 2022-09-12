@@ -77,7 +77,6 @@ pub fn linear_sum_assignment(mat: &na::DMatrix<f32>) -> (Vec<usize>, Vec<usize>)
     }
 
     let assignment: Vec<Option<usize>> = minimize(&matrix, height, width);
-
     let mut row_idxs = vec![];
     let mut col_idxs = vec![];
 

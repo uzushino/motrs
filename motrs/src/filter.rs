@@ -107,22 +107,22 @@ impl KalmanFilter {
         let R = R.unwrap_or(&self.R);
         let H = H.unwrap_or(&self.H);
 
-        self.y = z - matrix_dot(&H, &self.x.clone());
+        self.y = z - matrix_dot(&H, &self.x);
 
-        let PHT = matrix_dot(&self.P.clone(), &H.transpose());
+        let PHT = matrix_dot(&self.P, &H.transpose());
 
         self.S = matrix_dot(&H, &PHT) + R;
         self.SI = self.S.clone().pseudo_inverse(0.0001).unwrap();
         self.K = matrix_dot(&PHT, &self.SI);
-        self.x = matrix_add(&self.x, &matrix_dot(&self.K, &self.y.clone()));
+        self.x = matrix_add(&self.x, &matrix_dot(&self.K, &self.y));
 
         let I_KH = matrix_sub(
             &DMatrix::identity(self.dim_x, self.dim_x),
             &matrix_dot(&self.K, &H),
         );
 
-        let p1 = matrix_dot(&matrix_dot(&I_KH.clone(), &self.P), &I_KH.transpose());
-        let p2 = matrix_dot(&matrix_dot(&self.K.clone(), &R), &self.K.transpose());
+        let p1 = matrix_dot(&matrix_dot(&I_KH, &self.P), &I_KH.transpose());
+        let p2 = matrix_dot(&matrix_dot(&self.K, &R), &self.K.transpose());
 
         self.P = p1 + p2;
 

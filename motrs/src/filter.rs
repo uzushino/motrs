@@ -91,12 +91,12 @@ impl KalmanFilter {
         let Q = Q.unwrap_or(&self.Q);
 
         if B.is_some() && u.is_some() {
-            self.x = matrix_dot(&F, &self.x.clone()) + matrix_dot(&B.unwrap(), &u.unwrap());
+            self.x = matrix_dot(&F, &self.x) + matrix_dot(B.unwrap(), u.unwrap());
         } else {
-            self.x = matrix_dot(&F, &self.x.clone());
+            self.x = matrix_dot(&F, &self.x);
         }
 
-        self.P = matrix_dot(&matrix_dot(&F, &self.P.clone()), &F.transpose()) * self.alpha_sq + Q;
+        self.P = matrix_dot(&matrix_dot(&F, &self.P), &F.transpose()) * self.alpha_sq + Q;
 
         self.x_prior = self.x.clone();
         self.P_prior = self.P.clone();

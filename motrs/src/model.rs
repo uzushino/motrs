@@ -5,40 +5,37 @@ use std::cmp::max;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
-pub struct ModelPreset {}
+#[derive(Default)]
+pub struct ModelPreset {
+    order_pos: f32,
+    dim_pos: f32,
+    order_size: f32,
+    dim_size: f32,
+}
 
 impl ModelPreset {
     pub fn new() -> Self {
-        ModelPreset {}
+        ModelPreset {
+            ..Default::default()
+        }
     }
 
-    pub fn constant_velocity_and_static_box_size_2d() -> HashMap<String, f32> {
-        let key = vec![
-            String::from("order_pos"),
-            String::from("dim_pos"),
-            String::from("order_size"),
-            String::from("dim_size"),
-        ];
-        let value = vec![1., 2., 0., 2.];
-
-        key.into_iter()
-            .zip(value.into_iter())
-            .collect::<HashMap<_, _>>()
+    pub fn constant_velocity_and_static_box_size_2d() -> Self {
+        Self {
+            order_pos: 1.,
+            dim_pos: 2.,
+            order_size: 0.,
+            dim_size: 2.
+        }
     }
 
-    pub fn constant_acceleration_and_static_box_size_2d() -> HashMap<String, f32> {
-        let key = vec![
-            String::from("order_pos"),
-            String::from("dim_pos"),
-            String::from("order_size"),
-            String::from("dim_size"),
-        ];
-
-        let value = vec![2., 2., 0., 2.];
-
-        key.into_iter()
-            .zip(value.into_iter())
-            .collect::<HashMap<_, _>>()
+    pub fn constant_acceleration_and_static_box_size_2d() -> Self {
+        Self {
+            order_pos: 2.,
+            dim_pos: 2.,
+            order_size: 0.,
+            dim_size: 2.
+        }
     }
 }
 

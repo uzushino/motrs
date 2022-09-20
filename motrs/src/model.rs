@@ -7,10 +7,10 @@ use std::fmt::Debug;
 
 #[derive(Default)]
 pub struct ModelPreset {
-    order_pos: f32,
-    dim_pos: f32,
-    order_size: f32,
-    dim_size: f32,
+    pub order_pos: i32,
+    pub dim_pos: i32,
+    pub order_size: i32,
+    pub dim_size: i32,
 }
 
 impl ModelPreset {
@@ -22,19 +22,19 @@ impl ModelPreset {
 
     pub fn constant_velocity_and_static_box_size_2d() -> Self {
         Self {
-            order_pos: 1.,
-            dim_pos: 2.,
-            order_size: 0.,
-            dim_size: 2.
+            order_pos: 1,
+            dim_pos: 2,
+            order_size: 0,
+            dim_size: 2
         }
     }
 
     pub fn constant_acceleration_and_static_box_size_2d() -> Self {
         Self {
-            order_pos: 2.,
-            dim_pos: 2.,
-            order_size: 0.,
-            dim_size: 2.
+            order_pos: 2,
+            dim_pos: 2,
+            order_size: 0,
+            dim_size: 2
         }
     }
 }
@@ -131,10 +131,10 @@ pub struct Model {
 
 #[derive(Clone, Debug)]
 pub struct ModelKwargs {
-    pub order_pos: i64,
-    pub dim_pos: i64,
-    pub order_size: i64,
-    pub dim_size: i64,
+    pub order_pos: i32,
+    pub dim_pos: i32,
+    pub order_size: i32,
+    pub dim_size: i32,
     pub q_var_pos: f32,
     pub q_var_size: f32,
     pub r_var_pos: f32,

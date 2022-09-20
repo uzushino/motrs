@@ -451,7 +451,7 @@ pub struct MultiObjectTracker {
     matching_fn_kwargs: HashMap<String, f32>,
     active_tracks_kwargs: Option<ActiveTracksKwargs>,
     detections_matched_ids: Vec<String>,
-    model_preset: (f32, Option<ModelPreset>),
+    model_kwargs: (f32, Option<ModelKwargs>),
 }
 
 impl MultiObjectTracker {
@@ -464,17 +464,17 @@ impl MultiObjectTracker {
         active_tracks_kwargs: Option<ActiveTracksKwargs>,
     ) -> Self {
         let model_kwards = ModelKwargs {
-            order_pos: model_spec.order_pos as i64,
-            dim_pos: model_spec.dim_pos as i64,
-            order_size: model_spec.order_size as i64,
-            dim_size: model_spec.dim_size as i64,
+            order_pos: model_spec.order_pos,
+            dim_pos: model_spec.dim_pos,
+            order_size: model_spec.order_size,
+            dim_size: model_spec.dim_size,
             ..Default::default()
         };
 
         Self {
             trackers: Vec::default(),
             tracker_kwargs: tracker_kwargs,
-            model_preset: (dt, Some(model_spec)),
+            model_kwargs: (dt, Some(model_kwards)),
             matching_fn,
             matching_fn_kwargs: matching_fn_kwargs.unwrap_or_default(),
             active_tracks_kwargs: active_tracks_kwargs,
@@ -495,7 +495,7 @@ impl MultiObjectTracker {
         Mutex::new(KalmanTracker::new(
             x0,
             box0,
-            self.model_preset,
+            self.model_kwargs.clone(),
             Some(kwargs),
         ))
     }

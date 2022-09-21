@@ -18,7 +18,7 @@ fn test_test_simple_tracking_objects_1() {
     let num_steps_warmup = 1. * fps;
 
     let mut model_spec = ModelPreset::constant_velocity_and_static_box_size_2d();
-    *model_spec.entry(String::from("order_pos")).or_insert(0.) = 1.;
+    model_spec.order_pos = 1;
 
     let min_iou = 0.1;
     let multi_match_min_iou = 1. + 1e-7;

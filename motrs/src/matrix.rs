@@ -1,4 +1,3 @@
-use core::num;
 use std::fmt::Debug;
 
 use na::Scalar;
@@ -200,8 +199,6 @@ pub fn matrix_clip(
 
 #[cfg(test)]
 mod test {
-    use na::dmatrix;
-
     use super::*;
 
     #[test]

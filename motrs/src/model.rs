@@ -25,7 +25,7 @@ impl ModelPreset {
             order_pos: 1,
             dim_pos: 2,
             order_size: 0,
-            dim_size: 2
+            dim_size: 2,
         }
     }
 
@@ -34,7 +34,7 @@ impl ModelPreset {
             order_pos: 2,
             dim_pos: 2,
             order_size: 0,
-            dim_size: 2
+            dim_size: 2,
         }
     }
 }

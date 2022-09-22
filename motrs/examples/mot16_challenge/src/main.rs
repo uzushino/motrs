@@ -267,7 +267,6 @@ fn worker<I: 'static + Hash + Copy + Send + Sync>(id: I) -> iced::Subscription<(
 
     let frames_dir = format!("{}/img1", dataset_root2);
     let _dets_path = format!("{}/{}/{}.txt", dataset_root2, sel, sel);
-
     let init_state = MyState::Ready(MyTracker::create(), 1000);
     let dets_path = std::path::Path::new(_dets_path.as_str());
     let dets_gen = read_detections(dets_path, drop_detection_prob, add_detection_noise);

@@ -7,7 +7,6 @@ use approx::assert_relative_eq;
 use nalgebra::dmatrix;
 
 mod testing;
-
 use testing::data_generator;
 
 #[test]
@@ -86,7 +85,7 @@ fn test_tracker_diverges() {
 
     assert!(mot.trackers.len() == 1);
 
-    let first_track_id = mot.active_tracks(None)[0].id.clone();
+    let _ = mot.active_tracks(None)[0].id.clone();
     assert_relative_eq!(
         mot.trackers[0].clone().lock().unwrap().model().dt,
         0.1,

@@ -313,7 +313,7 @@ impl Tracker for KalmanTracker {
             self._base.score.unwrap(),
             detection.score,
         ));
-        //self._base.feature = Some((*self._base.update_feature_fn)(self._base.feature.clone().unwrap(), detection.feature.clone().unwrap()));
+        self._base.feature = Some((*self._base.update_feature_fn)(self._base.feature.clone().unwrap(), detection.feature.clone().unwrap()));
         self.unstale(Some(3.));
     }
 

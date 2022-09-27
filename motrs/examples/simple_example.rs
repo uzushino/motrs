@@ -30,7 +30,7 @@ fn main() {
 
         tracker.step(vec![det]);
 
-        let tracks = tracker.active_tracks(None);
+        let tracks = tracker.active_tracks();
 
         println!("MOT tracker tracks {} objects", tracks.len());
         println!("first track box: {}", tracks[0]._box);

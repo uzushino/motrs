@@ -37,11 +37,10 @@ pub fn calculate_iou(
         coords1[d] = matrix_maximum(&coords_b1[d], &coords_b2[d].transpose());
         coords2[d] = matrix_minimum(&coords_b1[d + dim], &coords_b2[d + dim].transpose());
 
-        let sub = coords2[d].clone() - coords1[d].clone();
+        let sub = matrix_sub(&coords2[d], &coords1[d]);
         let tmp = matrix_maximum(&sub, &zero);
 
         val_inter = matrix_mul(&tmp, &val_inter);
-
         val_b1 = matrix_mul(
             &(coords_b1[d + dim].clone() - coords_b1[d].clone()),
             &val_b1,

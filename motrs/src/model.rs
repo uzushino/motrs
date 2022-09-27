@@ -2,7 +2,6 @@ use crate::Q_discrete_white_noise;
 use na::Scalar;
 use nalgebra as na;
 use std::cmp::max;
-use std::collections::HashMap;
 use std::fmt::Debug;
 
 #[derive(Default)]

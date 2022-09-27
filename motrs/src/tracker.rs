@@ -243,14 +243,6 @@ pub struct KalmanTracker {
     _base: SingleObjectTracker,
 }
 
-#[derive(Clone)]
-pub struct KalmanFilterKwargs {
-    x0: Option<na::DMatrix<f32>>,
-    box0: Option<TrackBox>,
-    model_kwargs: Option<ModelKwargs>,
-    kwargs: Option<SingleObjectTrackerKwargs>,
-}
-
 impl KalmanTracker {
     pub fn new(
         x0: Option<na::DMatrix<f32>>,
@@ -313,7 +305,10 @@ impl Tracker for KalmanTracker {
             self._base.score.unwrap(),
             detection.score,
         ));
-        self._base.feature = Some((*self._base.update_feature_fn)(self._base.feature.clone().unwrap(), detection.feature.clone().unwrap()));
+        self._base.feature = Some((*self._base.update_feature_fn)(
+            self._base.feature.clone().unwrap(),
+            detection.feature.clone().unwrap(),
+        ));
         self.unstale(Some(3.));
     }
 
@@ -449,7 +444,7 @@ pub struct MultiObjectTracker {
     tracker_kwargs: Option<SingleObjectTrackerKwargs>,
     matching_fn: Option<IOUAndFeatureMatchingFunction>,
     matching_fn_kwargs: HashMap<String, f32>,
-    active_tracks_kwargs: Option<ActiveTracksKwargs>,
+    active_tracks_kwargs: ActiveTracksKwargs,
     detections_matched_ids: Vec<String>,
     model_kwargs: (f32, Option<ModelKwargs>),
 }
@@ -477,7 +472,7 @@ impl MultiObjectTracker {
             model_kwargs: (dt, Some(model_kwards)),
             matching_fn,
             matching_fn_kwargs: matching_fn_kwargs.unwrap_or_default(),
-            active_tracks_kwargs: active_tracks_kwargs,
+            active_tracks_kwargs: active_tracks_kwargs.unwrap_or_default(),
             detections_matched_ids: Vec::default(),
         }
     }
@@ -579,7 +574,7 @@ impl MultiObjectTracker {
 
         self.cleanup_trackers();
 
-        self.active_tracks(self.active_tracks_kwargs.clone())
+        self.active_tracks()
     }
 
     pub fn cleanup_trackers(&mut self) {
@@ -604,9 +599,9 @@ impl MultiObjectTracker {
         )
     }
 
-    pub fn active_tracks(&self, kwargs: Option<ActiveTracksKwargs>) -> Vec<Track> {
-        let kwargs = kwargs.unwrap_or_default();
+    pub fn active_tracks(&self) -> Vec<Track> {
         let mut tracks: Vec<Track> = Vec::default();
+        let kwargs = &self.active_tracks_kwargs;
 
         for tracker in self.trackers.iter() {
             let tr = tracker.lock().unwrap();

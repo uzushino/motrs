@@ -19,4 +19,3 @@ assert_approx_eq = "1.1.0"
 genawaiter = "0.99.1"
 csv = "1.1.6"
 rand_distr = "0.4.3"
-

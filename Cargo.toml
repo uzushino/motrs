@@ -1,7 +1,9 @@
 [workspace]
+resolver = "2"
 members = [
     "motrs",
-    "motrs_wasm"
+    "motrs_wasm",
+    "motrs/examples/mot16_challenge"
 ]
 
 [profile.release]

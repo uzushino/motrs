@@ -10,7 +10,7 @@ mod testing;
 use testing::data_generator;
 
 #[test]
-fn test_test_simple_tracking_objects_1() {
+fn test_simple_tracking_objects_1() {
     let fps = 24.;
     let dt = 1. / fps;
     let num_steps = 240;
@@ -29,7 +29,14 @@ fn test_test_simple_tracking_objects_1() {
         feature_similarity_fn,
         feature_similarity_beta,
     );
-    let mut mot = MultiObjectTracker::new(dt, model_spec, Some(matching_fn), None, None, None);
+    let mut mot = MultiObjectTracker::new(
+        dt,
+        model_spec,
+        Some(matching_fn),
+        None,
+        None,
+        Some(ActiveTracksKwargs::default()),
+    );
     let mut history: HashMap<i64, Vec<String>> = HashMap::from([(0, vec![]), (1, vec![])]);
     let mut gen = data_generator(num_steps, 2, 0.01, 0.2, 0.0, 1.0).into_iter();
 

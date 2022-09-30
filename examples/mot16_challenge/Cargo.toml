@@ -5,7 +5,7 @@ publish = false
 version = "0.1.0"
 
 [dependencies]
-motrs = { path = "../.." }
+motrs = { path = "../motrs" }
 
 iced = { version = "0.4.2", features = ["canvas", "image"] }
 iced_native = "0.5.1"

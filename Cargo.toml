@@ -2,8 +2,7 @@
 resolver = "2"
 members = [
     "motrs",
-    "motrs_wasm",
-    "motrs/examples/mot16_challenge"
+    "motrs_wasm"
 ]
 
 [profile.release]

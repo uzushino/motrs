@@ -284,8 +284,7 @@ impl Tracker for KalmanTracker {
 
     fn is_invalid(&self) -> bool {
         let x = matrix_to_vec(&self._tracker.x);
-        let has_nans = x.iter().any(|v| v.is_nan());
-        has_nans
+        x.iter().any(|v| v.is_nan())
     }
 
     fn is_stale(&self) -> bool {

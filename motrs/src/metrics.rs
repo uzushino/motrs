@@ -55,7 +55,9 @@ pub fn calculate_iou(
         &matrix_add(&val_b1, &val_b2.transpose()),
         &val_inter.clone(),
     );
-    let iou = matrix_div(&val_inter, &matrix_clip(&tmp, Some(0.), None));
+    let iou = matrix_div(
+        &val_inter,
+        &matrix_clip(&tmp, Some(0.), None));
 
     iou
 }

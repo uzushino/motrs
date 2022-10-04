@@ -7,7 +7,6 @@ pub struct MOT {
     tracker: MultiObjectTracker,
 }
 
-
 #[wasm_bindgen]
 impl MOT {
     pub fn new() -> Self {
@@ -24,7 +23,7 @@ impl MOT {
         );
 
         let tracker = MultiObjectTracker::new(
-            1. / 30.,
+            1. / 30., // fps
             model_spec,
             Some(matching_fn),
             Some(SingleObjectTrackerKwargs {
@@ -35,6 +34,6 @@ impl MOT {
             None,
         );
 
-        MOT { tracker }
+        Self { tracker }
     }
 }

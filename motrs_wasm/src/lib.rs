@@ -1,3 +1,4 @@
+use motrs::matrix::{matrix_to_vec};
 use motrs::model::*;
 use motrs::tracker::*;
 use wasm_bindgen::prelude::*;
@@ -10,6 +11,15 @@ use nalgebra as na;
 pub struct MOT {
     tracker: MultiObjectTracker,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct TrackBox {
+    pub id: String,
+    pub _box: Vec<f32>,
+    pub score: Option<f32>,
+    pub class_id: Option<i64>,
+}
+
 
 #[derive(Serialize, Deserialize)]
 pub struct Box {
@@ -51,24 +61,30 @@ impl MOT {
             .into_serde()
             .unwrap();
 
-        console::log_1(&format!("len: {}", _box.len()).into());
-
         let _box = na::DMatrix::from_row_slice(1, 4, &_box[0]._box);
-
         let dets = Detection {
             _box: Some(_box.clone()),
             score: 1.,
             class_id: 1,
             feature: None,
         };
-
+        //console::log_1(&format!("{:?}", self.tracker.detections_matched_ids).into())
         self.tracker.step(vec![dets]);
     }
 
-    pub fn active_tracks(&mut self) {
+
+    pub fn active_tracks(&mut self) -> JsValue {
         let tracks = self.tracker.active_tracks();
 
-        console::log_1(&format!("MOT tracker tracks {} objects", tracks.len()).into());
-        console::log_1(&format!("first track box: {}", tracks[0]._box).into());
+        let track_objects =
+            tracks.iter().map(|v| TrackBox {
+                id: v.id.clone(),
+                _box: matrix_to_vec(&v._box),
+                score: v.score,
+                class_id: v.class_id
+            })
+            .collect::<Vec<TrackBox>>();
+
+        JsValue::from_serde(&track_objects).unwrap()
     }
 }

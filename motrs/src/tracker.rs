@@ -440,8 +440,8 @@ impl Default for ActiveTracksKwargs {
     }
 }
 
-pub struct MultiObjectTracker {
-    pub trackers: Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
+pub struct MultiObjectTracker<'a> {
+    pub trackers: Vec<&'a KalmanTracker>,
     tracker_kwargs: Option<SingleObjectTrackerKwargs>,
     matching_fn: Option<IOUAndFeatureMatchingFunction>,
     matching_fn_kwargs: HashMap<String, f32>,
@@ -450,7 +450,7 @@ pub struct MultiObjectTracker {
     model_kwargs: (f32, Option<ModelKwargs>),
 }
 
-impl MultiObjectTracker {
+impl<'a> MultiObjectTracker<'a> {
     pub fn new(
         dt: f32,
         model_spec: ModelPreset,
@@ -483,17 +483,17 @@ impl MultiObjectTracker {
         x0: Option<na::DMatrix<f32>>,
         box0: Option<na::DMatrix<f32>>,
         det: Detection,
-    ) -> Mutex<impl Tracker + Send + Sync> {
+    ) -> KalmanTracker {
         let mut kwargs = self.tracker_kwargs.clone().unwrap_or_default();
         kwargs.score0 = Some(det.score.clone());
         kwargs.class_id0 = Some(det.class_id);
 
-        Mutex::new(KalmanTracker::new(
+        KalmanTracker::new(
             x0,
             box0,
             self.model_kwargs.clone(),
             Some(kwargs),
-        ))
+        )
     }
 
     pub fn step(&mut self, detections: Vec<Detection>) -> Vec<Track> {
@@ -503,7 +503,7 @@ impl MultiObjectTracker {
             .collect::<Vec<_>>();
 
         for t in self.trackers.iter_mut() {
-            t.lock().unwrap()._predict();
+            t._predict();
             // Arc::get_mut(t).map(|t| t._predict());
         }
 
@@ -520,7 +520,7 @@ impl MultiObjectTracker {
             let det = &detections[det_idx as usize];
 
             {
-                let tracker = &mut self.trackers[track_idx as usize].lock().unwrap();
+                let tracker = &mut self.trackers[track_idx as usize];
                 tracker.update(det);
                 self.detections_matched_ids[det_idx as usize] = tracker.id();
             }
@@ -545,11 +545,11 @@ impl MultiObjectTracker {
         for det_idx in diff {
             let det = &detections[*det_idx as usize];
             let tracker = self.tracker_clss(None, det._box.clone(), det.clone());
-            let tracker_id = tracker.lock().unwrap().id();
+            let tracker_id = tracker.id();
             let det_id: usize = det_idx.clone() as usize;
 
             self.detections_matched_ids[det_id] = tracker_id;
-            self.trackers.push(Arc::new(tracker));
+            self.trackers.push(tracker);
         }
 
         let assigned_track_idxs: HashSet<u64> = if matches.len() > 0 {
@@ -569,7 +569,7 @@ impl MultiObjectTracker {
         diff.sort();
 
         for track_idx in diff {
-            let tracker = &mut self.trackers[*track_idx as usize].lock().unwrap();
+            let tracker = &mut self.trackers[*track_idx as usize];
             tracker.stale(None);
         }
 
@@ -585,10 +585,9 @@ impl MultiObjectTracker {
             .trackers
             .iter()
             .filter(|t| {
-                let tr = t.lock().unwrap();
+                let tr = t;
                 !(tr.is_stale() || tr.is_invalid())
             })
-            .map(|t| t.clone())
             .collect::<Vec<_>>();
 
         let count_after = self.trackers.len();

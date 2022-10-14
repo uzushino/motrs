@@ -12,6 +12,6 @@ rust.then((m) => {
     mot.step([det])
     console.log(i)
 
-    let tracks = mot.active_tracks()
-    console.log(tracks)
+    mot.step([det])
+    console.log(i)
 })

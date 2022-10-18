@@ -7,6 +7,7 @@ use crate::filter::KalmanFilter;
 use crate::matrix::*;
 use crate::metrics::*;
 use crate::model::{Model, ModelKwargs, ModelPreset};
+
 use std::vec;
 
 macro_rules! array {
@@ -345,7 +346,7 @@ impl Tracker for KalmanTracker {
 trait BaseMatchingFunction {
     fn call(
         &self,
-        trackers: &Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
+        trackers: &Vec<Arc<Mutex<KalmanTracker>>>,
         detections: &Vec<Detection>,
     ) -> na::DMatrix<f32>;
 }
@@ -390,7 +391,7 @@ impl Default for IOUAndFeatureMatchingFunction {
 impl BaseMatchingFunction for IOUAndFeatureMatchingFunction {
     fn call(
         &self,
-        trackers: &Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
+        trackers: &Vec<Arc<Mutex<KalmanTracker>>>,
         detections: &Vec<Detection>,
     ) -> na::DMatrix<f32> {
         match_by_cost_matrix(
@@ -440,8 +441,8 @@ impl Default for ActiveTracksKwargs {
     }
 }
 
-pub struct MultiObjectTracker<'a> {
-    pub trackers: Vec<&'a KalmanTracker>,
+pub struct MultiObjectTracker {
+    pub trackers: Vec<Arc<Mutex<KalmanTracker>>>,
     tracker_kwargs: Option<SingleObjectTrackerKwargs>,
     matching_fn: Option<IOUAndFeatureMatchingFunction>,
     matching_fn_kwargs: HashMap<String, f32>,
@@ -450,7 +451,7 @@ pub struct MultiObjectTracker<'a> {
     model_kwargs: (f32, Option<ModelKwargs>),
 }
 
-impl<'a> MultiObjectTracker<'a> {
+impl<'a> MultiObjectTracker {
     pub fn new(
         dt: f32,
         model_spec: ModelPreset,
@@ -503,7 +504,7 @@ impl<'a> MultiObjectTracker<'a> {
             .collect::<Vec<_>>();
 
         for t in self.trackers.iter_mut() {
-            t._predict();
+            t.lock().unwrap()._predict();
             // Arc::get_mut(t).map(|t| t._predict());
         }
 
@@ -520,7 +521,7 @@ impl<'a> MultiObjectTracker<'a> {
             let det = &detections[det_idx as usize];
 
             {
-                let tracker = &mut self.trackers[track_idx as usize];
+                let tracker = &mut self.trackers[track_idx as usize].lock().unwrap();
                 tracker.update(det);
                 self.detections_matched_ids[det_idx as usize] = tracker.id();
             }
@@ -549,7 +550,7 @@ impl<'a> MultiObjectTracker<'a> {
             let det_id: usize = det_idx.clone() as usize;
 
             self.detections_matched_ids[det_id] = tracker_id;
-            self.trackers.push(tracker);
+            self.trackers.push(Arc::new(Mutex::new(tracker)));
         }
 
         let assigned_track_idxs: HashSet<u64> = if matches.len() > 0 {
@@ -570,7 +571,7 @@ impl<'a> MultiObjectTracker<'a> {
 
         for track_idx in diff {
             let tracker = &mut self.trackers[*track_idx as usize];
-            tracker.stale(None);
+            tracker.lock().unwrap().stale(None);
         }
 
         self.cleanup_trackers();
@@ -581,14 +582,17 @@ impl<'a> MultiObjectTracker<'a> {
     pub fn cleanup_trackers(&mut self) {
         let count_before = self.trackers.len();
 
-        self.trackers = self
+        let mut new_trackers = self
             .trackers
             .iter()
             .filter(|t| {
-                let tr = t;
+                let tr = t.try_lock().unwrap();
                 !(tr.is_stale() || tr.is_invalid())
             })
+            .map(|a| a.clone())
             .collect::<Vec<_>>();
+
+        std::mem::swap(&mut self.trackers, &mut new_trackers);
 
         let count_after = self.trackers.len();
 
@@ -626,7 +630,7 @@ impl<'a> MultiObjectTracker<'a> {
 }
 
 fn cost_matrix_iou_feature(
-    trackers: &Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
+    trackers: &Vec<Arc<Mutex<KalmanTracker>>>,
     detections: &Vec<Detection>,
     feature_similarity_fn: Option<
         Box<dyn FnOnce(Vec<na::DMatrix<f32>>, Vec<na::DMatrix<f32>>) -> f32>,
@@ -639,8 +643,7 @@ fn cost_matrix_iou_feature(
 
     for tracker in trackers.iter() {
         let mut vs = tracker
-            .lock()
-            .unwrap()
+            .lock().unwrap()
             ._box()
             .iter()
             .map(|m| *m)
@@ -677,7 +680,7 @@ fn cost_matrix_iou_feature(
     if feature_similarity_beta.is_some() {
         let f1 = trackers
             .iter()
-            .map(|t| (*t).lock().unwrap()._feature())
+            .map(|t| t.lock().unwrap()._feature())
             .collect::<Vec<_>>();
         let f2 = detections
             .iter()
@@ -705,7 +708,7 @@ fn cost_matrix_iou_feature(
 }
 
 pub fn match_by_cost_matrix(
-    trackers: &Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
+    trackers: &Vec<Arc<Mutex<KalmanTracker>>>,
     detections: &Vec<Detection>,
     min_iou: f32,
     multi_match_min_iou: f32,

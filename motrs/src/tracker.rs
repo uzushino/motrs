@@ -1,6 +1,7 @@
 use nalgebra as na;
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
+use std::ops::Mul;
 use std::sync::{Arc, Mutex};
 
 use crate::filter::KalmanFilter;
@@ -346,7 +347,7 @@ impl Tracker for KalmanTracker {
 trait BaseMatchingFunction {
     fn call(
         &self,
-        trackers: &Vec<Arc<Mutex<KalmanTracker>>>,
+        trackers: &Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
         detections: &Vec<Detection>,
     ) -> na::DMatrix<f32>;
 }
@@ -391,7 +392,7 @@ impl Default for IOUAndFeatureMatchingFunction {
 impl BaseMatchingFunction for IOUAndFeatureMatchingFunction {
     fn call(
         &self,
-        trackers: &Vec<Arc<Mutex<KalmanTracker>>>,
+        trackers: &Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
         detections: &Vec<Detection>,
     ) -> na::DMatrix<f32> {
         match_by_cost_matrix(
@@ -442,7 +443,7 @@ impl Default for ActiveTracksKwargs {
 }
 
 pub struct MultiObjectTracker {
-    pub trackers: Vec<Arc<Mutex<KalmanTracker>>>,
+    pub trackers: Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
     tracker_kwargs: Option<SingleObjectTrackerKwargs>,
     matching_fn: Option<IOUAndFeatureMatchingFunction>,
     matching_fn_kwargs: HashMap<String, f32>,
@@ -451,7 +452,7 @@ pub struct MultiObjectTracker {
     model_kwargs: (f32, Option<ModelKwargs>),
 }
 
-impl<'a> MultiObjectTracker {
+impl MultiObjectTracker {
     pub fn new(
         dt: f32,
         model_spec: ModelPreset,
@@ -629,8 +630,22 @@ impl<'a> MultiObjectTracker {
     }
 }
 
+impl Default for MultiObjectTracker {
+    fn default() -> Self {
+        MultiObjectTracker {
+            trackers: Vec::default(),
+            tracker_kwargs: None,
+            matching_fn: None,
+            matching_fn_kwargs: HashMap::default(),
+            active_tracks_kwargs: ActiveTracksKwargs::default(),
+            detections_matched_ids: Vec::default(),
+            model_kwargs: (0.0, None)
+        }
+    }
+}
+
 fn cost_matrix_iou_feature(
-    trackers: &Vec<Arc<Mutex<KalmanTracker>>>,
+    trackers: &Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
     detections: &Vec<Detection>,
     feature_similarity_fn: Option<
         Box<dyn FnOnce(Vec<na::DMatrix<f32>>, Vec<na::DMatrix<f32>>) -> f32>,
@@ -708,7 +723,7 @@ fn cost_matrix_iou_feature(
 }
 
 pub fn match_by_cost_matrix(
-    trackers: &Vec<Arc<Mutex<KalmanTracker>>>,
+    trackers: &Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
     detections: &Vec<Detection>,
     min_iou: f32,
     multi_match_min_iou: f32,

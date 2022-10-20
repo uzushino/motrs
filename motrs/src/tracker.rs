@@ -635,7 +635,7 @@ impl Default for MultiObjectTracker {
             matching_fn_kwargs: HashMap::default(),
             active_tracks_kwargs: ActiveTracksKwargs::default(),
             detections_matched_ids: Vec::default(),
-            model_kwargs: (0.0, None)
+            model_kwargs: (0.0, None),
         }
     }
 }

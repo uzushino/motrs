@@ -1,8 +1,8 @@
 use nalgebra as na;
 
+pub mod matrix;
 pub mod model;
 pub mod tracker;
-pub mod matrix;
 
 mod assignment;
 mod filter;

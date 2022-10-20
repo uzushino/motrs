@@ -30,7 +30,7 @@ pub struct Box {
 impl MOT {
     pub fn new() -> Self {
         let model_spec = ModelPreset::constant_acceleration_and_static_box_size_2d();
-        let min_iou = 0.25;
+        let min_iou = 0.1;
         let multi_match_min_iou = 1. + 1e-7;
         let feature_similarity_fn = None;
         let feature_similarity_beta = None;
@@ -42,7 +42,7 @@ impl MOT {
         );
 
         let tracker = MultiObjectTracker::new(
-            1. / 30., // fps
+            0.1, // fps
             model_spec,
             Some(matching_fn),
             Some(SingleObjectTrackerKwargs {

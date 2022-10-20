@@ -2,10 +2,10 @@ use nalgebra as na;
 
 pub mod model;
 pub mod tracker;
+pub mod matrix;
 
 mod assignment;
 mod filter;
-mod matrix;
 mod metrics;
 
 use crate::tracker::Track;

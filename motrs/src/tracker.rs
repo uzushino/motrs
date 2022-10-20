@@ -626,6 +626,20 @@ impl MultiObjectTracker {
     }
 }
 
+impl Default for MultiObjectTracker {
+    fn default() -> Self {
+        MultiObjectTracker {
+            trackers: Vec::default(),
+            tracker_kwargs: None,
+            matching_fn: None,
+            matching_fn_kwargs: HashMap::default(),
+            active_tracks_kwargs: ActiveTracksKwargs::default(),
+            detections_matched_ids: Vec::default(),
+            model_kwargs: (0.0, None)
+        }
+    }
+}
+
 fn cost_matrix_iou_feature(
     trackers: &Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
     detections: &Vec<Detection>,

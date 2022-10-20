@@ -5,7 +5,7 @@ use motrs::tracker::{Detection, IOUAndFeatureMatchingFunction, MultiObjectTracke
 
 fn main() {
     let mut object_box = na::DMatrix::from_row_slice(1, 4, &[1., 1., 10., 10.]);
-    let model_spec = ModelPreset::constant_velocity_and_static_box_size_2d();
+    let model_spec = ModelPreset::constant_acceleration_and_static_box_size_2d();
     let min_iou = 0.1;
     let multi_match_min_iou = 1. + 1e-7;
     let feature_similarity_fn = None;
@@ -16,7 +16,14 @@ fn main() {
         feature_similarity_fn,
         feature_similarity_beta,
     );
-    let mut tracker = MultiObjectTracker::new(0.1, model_spec, Some(matching_fn), None, None, None);
+    let mut tracker = MultiObjectTracker::new(
+        0.1,
+        model_spec,
+        Some(matching_fn),
+        None,
+        None,
+        None
+    );
 
     for _step in 0..10 {
         object_box += na::DMatrix::from_row_slice(1, 4, &[1., 1., 1., 1.]);

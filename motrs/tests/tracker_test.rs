@@ -4,6 +4,7 @@ use motrs::model::*;
 use motrs::tracker::*;
 
 use approx::assert_relative_eq;
+use nalgebra as na;
 use nalgebra::dmatrix;
 
 mod testing;
@@ -98,4 +99,47 @@ fn test_tracker_diverges() {
         0.1,
         epsilon = 1e-3f32
     )
+}
+
+#[test]
+fn main() {
+    let model_spec = ModelPreset::constant_velocity_and_static_box_size_2d();
+    let min_iou = 0.1;
+    let multi_match_min_iou = 1. + 1e-7;
+    let feature_similarity_fn = None;
+    let feature_similarity_beta = None;
+    let matching_fn = IOUAndFeatureMatchingFunction::new(
+        min_iou,
+        multi_match_min_iou,
+        feature_similarity_fn,
+        feature_similarity_beta,
+    );
+
+    let mut mot = MultiObjectTracker::new(0.1, model_spec, Some(matching_fn), None, None, None);
+    let mut object_box = na::DMatrix::from_row_slice(1, 4, &[1., 1., 10., 10.]);
+    let det = Detection {
+        _box: Some(object_box.clone()),
+        score: 1.,
+        class_id: 1,
+        feature: None,
+    };
+    mot.step(vec![det]);
+
+    let tracks = mot.active_tracks();
+    let object_id = tracks[0].id.clone();
+
+    for _step in 0..10 {
+        object_box += na::DMatrix::from_row_slice(1, 4, &[1., 1., 1., 1.]);
+
+        let det = Detection {
+            _box: Some(object_box.clone()),
+            score: 1.,
+            class_id: 1,
+            feature: None,
+        };
+        mot.step(vec![det]);
+
+        let track = &tracks[0];
+        assert!(object_id == track.id);
+    }
 }

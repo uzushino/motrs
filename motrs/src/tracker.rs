@@ -581,15 +581,12 @@ impl MultiObjectTracker {
     pub fn cleanup_trackers(&mut self) {
         let count_before = self.trackers.len();
 
-        self.trackers = self
+        self
             .trackers
-            .iter()
-            .filter(|t| {
+            .retain(|t| {
                 let tr = t.lock().unwrap();
                 !(tr.is_stale() || tr.is_invalid())
-            })
-            .map(|t| t.clone())
-            .collect::<Vec<_>>();
+            });
 
         let count_after = self.trackers.len();
 

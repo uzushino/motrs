@@ -346,7 +346,7 @@ trait BaseMatchingFunction {
     fn call(
         &self,
         trackers: &Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
-        detections: &Vec<Detection>,
+        detections: &[Detection],
     ) -> na::DMatrix<f32>;
 }
 
@@ -391,7 +391,7 @@ impl BaseMatchingFunction for IOUAndFeatureMatchingFunction {
     fn call(
         &self,
         trackers: &Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
-        detections: &Vec<Detection>,
+        detections: &[Detection],
     ) -> na::DMatrix<f32> {
         match_by_cost_matrix(
             trackers,
@@ -469,7 +469,7 @@ impl MultiObjectTracker {
 
         Self {
             trackers: Vec::default(),
-            tracker_kwargs: tracker_kwargs,
+            tracker_kwargs,
             model_kwargs: (dt, Some(model_kwards)),
             matching_fn,
             matching_fn_kwargs: matching_fn_kwargs.unwrap_or_default(),
@@ -639,7 +639,7 @@ impl Default for MultiObjectTracker {
 
 fn cost_matrix_iou_feature(
     trackers: &Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
-    detections: &Vec<Detection>,
+    detections: &[Detection],
     feature_similarity_fn: Option<
         Box<dyn FnOnce(Vec<na::DMatrix<f32>>, Vec<na::DMatrix<f32>>) -> f32>,
     >,
@@ -718,7 +718,7 @@ fn cost_matrix_iou_feature(
 
 pub fn match_by_cost_matrix(
     trackers: &Vec<Arc<Mutex<dyn Tracker + Send + Sync>>>,
-    detections: &Vec<Detection>,
+    detections: &[Detection],
     min_iou: f32,
     multi_match_min_iou: f32,
     feature_similarity_fn: Option<

@@ -3,6 +3,7 @@ use na::Scalar;
 use nalgebra as na;
 use std::cmp::max;
 use std::fmt::Debug;
+use std::ops::Add;
 
 #[derive(Default)]
 pub struct ModelPreset {
@@ -38,7 +39,7 @@ impl ModelPreset {
     }
 }
 
-fn base_dim_block<'a>(dt: f32, order: usize) -> na::DMatrix<f32> {
+fn base_dim_block(dt: f32, order: usize) -> na::DMatrix<f32> {
     let block =
         na::DMatrix::from_row_slice(3, 3, &[1., dt, (dt.powf(2.)) / 2., 0., 1., dt, 0., 0., 1.]);
 
@@ -57,7 +58,7 @@ fn repeat_vec<T: Clone>(x: Vec<T>, size: usize) -> Vec<T> {
     x.iter()
         .cycle()
         .take(x.len() * size)
-        .map(|v| v.clone())
+        .cloned()
         .collect::<Vec<_>>()
 }
 
@@ -307,8 +308,8 @@ impl Model {
         let b = _box.index((1, ..)) - _box.index((0, ..));
         let length = b.columns(0, self.dim_size);
 
-        let mut result = center.iter().map(|v| *v).collect::<Vec<f32>>();
-        result.append(&mut length.iter().map(|v| *v).collect::<Vec<f32>>());
+        let mut result = center.iter().copied().collect::<Vec<f32>>();
+        result.append(&mut length.iter().copied().collect::<Vec<f32>>());
 
         na::DMatrix::from_row_slice(1, result.len(), result.as_slice())
     }

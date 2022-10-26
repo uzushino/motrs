@@ -32,8 +32,8 @@ fn get_kalman_object_tracker(model: &Model, x0: Option<na::DMatrix<f32>>) -> Kal
     tracker.R = model.build_R();
     tracker.P = model.build_P();
 
-    if x0.is_some() {
-        tracker.x = x0.unwrap();
+    if let Some(x) = x0 {
+        tracker.x = x;
     }
 
     tracker

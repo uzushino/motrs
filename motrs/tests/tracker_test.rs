@@ -64,7 +64,7 @@ fn test_simple_tracking_objects_1() {
 
             for m in 0..matches.shape().0 {
                 let (gidx, tidx) = (matches[(m, 0)], matches[(m, 1)]);
-                let track_id = mot.trackers[tidx as usize].lock().unwrap().id();
+                let track_id = mot.trackers[tidx as usize].id();
 
                 history.get_mut(&(gidx as i64)).map(|f| f.push(track_id));
             }
@@ -94,8 +94,9 @@ fn test_tracker_diverges() {
     assert!(mot.trackers.len() == 1);
 
     let _ = mot.active_tracks()[0].id.clone();
+
     assert_relative_eq!(
-        mot.trackers[0].clone().lock().unwrap().model().dt,
+        mot.trackers[0].model().dt,
         0.1,
         epsilon = 1e-3f32
     )

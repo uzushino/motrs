@@ -1,5 +1,6 @@
 use nalgebra as na;
 use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::iter::FromIterator;
 use std::sync::{Arc, Mutex};
 
@@ -552,16 +553,15 @@ impl MultiObjectTracker {
             self.trackers.push(tracker);
         }
 
-        let assigned_track_idxs: HashSet<u64> = if matches.len() > 0 {
+        let assigned_track_idxs: HashSet<usize> = if matches.len() > 0 {
             let assigned_track_idxs = matches.index((.., 0)).data.into_slice().to_vec();
-            let assigned_track_idxs = assigned_track_idxs.iter().map(|v| *v as u64);
+            let assigned_track_idxs = assigned_track_idxs.iter().map(|v| *v as usize);
             HashSet::from_iter(assigned_track_idxs)
         } else {
             HashSet::from_iter(Vec::default())
         };
 
-        let track_ranges: HashSet<u64> =
-            HashSet::from_iter((0..self.trackers.len()).into_iter().map(|v| v as u64));
+        let track_ranges = HashSet::from_iter(0..self.trackers.len());
         let mut diff = track_ranges
             .difference(&assigned_track_idxs)
             .into_iter()

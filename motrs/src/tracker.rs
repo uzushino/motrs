@@ -24,7 +24,7 @@ pub struct Track {
     pub class_id: Option<i64>,
 }
 
-fn get_kalman_object_tracker(model: &Model, x0: Option<na::DMatrix<f32>>) -> KalmanFilter {
+fn get_kalman_object_tracker(model: &Model, x0: &mut Option<na::DMatrix<f32>>) -> KalmanFilter {
     let mut tracker = KalmanFilter::new(model.state_length, model.measurement_lengths, 0);
 
     tracker.F = model.build_F();
@@ -33,8 +33,8 @@ fn get_kalman_object_tracker(model: &Model, x0: Option<na::DMatrix<f32>>) -> Kal
     tracker.R = model.build_R();
     tracker.P = model.build_P();
 
-    if let Some(x) = x0 {
-        tracker.x = x;
+    if let Some(x) = x0.as_mut() {
+        std::mem::swap(&mut tracker.x, x);
     }
 
     tracker
@@ -253,7 +253,7 @@ impl KalmanTracker {
     ) -> Self {
         let model = Model::new(model_kwargs.0, model_kwargs.1.clone());
         let x0 = x0.unwrap_or(model.box_to_x(box0.unwrap()));
-        let tracker = get_kalman_object_tracker(&model, Some(x0));
+        let tracker = get_kalman_object_tracker(&model, &mut Some(x0));
 
         Self {
             model_kwargs: (model_kwargs.0, model_kwargs.1),
@@ -648,11 +648,7 @@ fn cost_matrix_iou_feature(
     let mut data = Vec::new();
 
     for tracker in trackers.iter() {
-        let mut vs = tracker
-            ._box()
-            .iter()
-            .map(|m| *m)
-            .collect::<Vec<_>>();
+        let mut vs = tracker._box().iter().map(|m| *m).collect::<Vec<_>>();
         data.append(&mut vs);
     }
 
@@ -683,10 +679,7 @@ fn cost_matrix_iou_feature(
     let mut apt_mat = iou_mat.clone();
 
     if feature_similarity_beta.is_some() {
-        let f1 = trackers
-            .iter()
-            .map(|t| (*t)._feature())
-            .collect::<Vec<_>>();
+        let f1 = trackers.iter().map(|t| (*t)._feature()).collect::<Vec<_>>();
         let f2 = detections
             .iter()
             .map(|t| t.feature.clone())

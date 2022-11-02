@@ -95,11 +95,7 @@ fn test_tracker_diverges() {
 
     let _ = mot.active_tracks()[0].id.clone();
 
-    assert_relative_eq!(
-        mot.trackers[0].model().dt,
-        0.1,
-        epsilon = 1e-3f32
-    )
+    assert_relative_eq!(mot.trackers[0].model().dt, 0.1, epsilon = 1e-3f32)
 }
 
 #[test]

@@ -1,8 +1,8 @@
 use criterion::{criterion_group, Criterion};
 
-use nalgebra as na;
 use motrs::model::*;
 use motrs::tracker::*;
+use nalgebra as na;
 
 pub fn step(c: &mut Criterion) {
     let model_spec = ModelPreset::constant_acceleration_and_static_box_size_2d();
@@ -29,7 +29,6 @@ pub fn step(c: &mut Criterion) {
                     feature: None,
                 };
                 tracker.step(vec![det]);
-
             }
         })
     });

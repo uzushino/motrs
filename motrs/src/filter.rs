@@ -3,50 +3,67 @@ use crate::matrix::*;
  * Refer: https://github.com/MichaelMauderer/filter-rs
  */
 use nalgebra::DMatrix;
+use nalgebra::Scalar;
+use nalgebra::{ComplexField, RealField};
+use num_traits::{Float, Num, One, Zero};
+use std::ops::AddAssign;
+use std::{fmt::Debug, ops::Add};
 
 #[allow(non_snake_case)]
 #[derive(Debug)]
-pub struct KalmanFilter {
+pub struct KalmanFilter<T> {
     pub dim_x: usize,
     pub dim_z: usize,
     pub dim_u: usize,
 
-    pub x: DMatrix<f32>,
-    pub P: DMatrix<f32>,
-    pub x_prior: DMatrix<f32>,
-    pub P_prior: DMatrix<f32>,
-    pub x_post: DMatrix<f32>,
-    pub P_post: DMatrix<f32>,
-    pub z: Option<DMatrix<f32>>,
-    pub R: DMatrix<f32>,
-    pub Q: DMatrix<f32>,
-    pub B: Option<DMatrix<f32>>,
-    pub F: DMatrix<f32>,
-    pub H: DMatrix<f32>,
-    pub y: DMatrix<f32>,
-    pub K: DMatrix<f32>,
-    pub S: DMatrix<f32>,
-    pub SI: DMatrix<f32>,
-    pub alpha_sq: f32,
+    pub x: DMatrix<T>,
+    pub P: DMatrix<T>,
+    pub x_prior: DMatrix<T>,
+    pub P_prior: DMatrix<T>,
+    pub x_post: DMatrix<T>,
+    pub P_post: DMatrix<T>,
+    pub z: Option<DMatrix<T>>,
+    pub R: DMatrix<T>,
+    pub Q: DMatrix<T>,
+    pub B: Option<DMatrix<T>>,
+    pub F: DMatrix<T>,
+    pub H: DMatrix<T>,
+    pub y: DMatrix<T>,
+    pub K: DMatrix<T>,
+    pub S: DMatrix<T>,
+    pub SI: DMatrix<T>,
+    pub alpha_sq: T,
 }
 
 #[allow(non_snake_case)]
-impl KalmanFilter {
+impl<
+        T: Zero
+            + Debug
+            + Clone
+            + Scalar
+            + Copy
+            + One
+            + Float
+            + Num
+            + AddAssign
+            + ComplexField<RealField = T>,
+    > KalmanFilter<T>
+{
     pub fn new(dim_x: usize, dim_z: usize, dim_u: usize) -> Self {
-        let x = DMatrix::<f32>::from_element(1, dim_x, 0.0);
-        let P = DMatrix::<f32>::identity(dim_x, dim_x);
-        let Q = DMatrix::<f32>::identity(dim_x, dim_x);
-        let F = DMatrix::<f32>::identity(dim_x, dim_x);
-        let H = DMatrix::<f32>::from_element(dim_z, dim_x, 0.0);
-        let R = DMatrix::<f32>::identity(dim_z, dim_z);
-        let alpha_sq = 1.0;
+        let x = DMatrix::<T>::from_element(1, dim_x, T::zero());
+        let P = DMatrix::<T>::identity(dim_x, dim_x);
+        let Q = DMatrix::<T>::identity(dim_x, dim_x);
+        let F = DMatrix::<T>::identity(dim_x, dim_x);
+        let H = DMatrix::<T>::from_element(dim_z, dim_x, T::zero());
+        let R = DMatrix::<T>::identity(dim_z, dim_z);
+        let alpha_sq = T::one();
 
         let z = None;
 
-        let K = DMatrix::<f32>::from_element(dim_x, dim_z, 0.0);
-        let y = DMatrix::<f32>::from_element(1, dim_z, 1.0);
-        let S = DMatrix::<f32>::from_element(dim_z, dim_z, 0.0);
-        let SI = DMatrix::<f32>::from_element(dim_z, dim_z, 0.0);
+        let K = DMatrix::<T>::from_element(dim_x, dim_z, T::zero());
+        let y = DMatrix::<T>::from_element(1, dim_z, T::one());
+        let S = DMatrix::<T>::from_element(dim_z, dim_z, T::zero());
+        let SI = DMatrix::<T>::from_element(dim_z, dim_z, T::zero());
 
         let x_prior = x.clone();
         let P_prior = P.clone();
@@ -81,10 +98,10 @@ impl KalmanFilter {
 
     pub fn predict(
         &mut self,
-        u: Option<&DMatrix<f32>>,
-        B: Option<&DMatrix<f32>>,
-        F: Option<&DMatrix<f32>>,
-        Q: Option<&DMatrix<f32>>,
+        u: Option<&DMatrix<T>>,
+        B: Option<&DMatrix<T>>,
+        F: Option<&DMatrix<T>>,
+        Q: Option<&DMatrix<T>>,
     ) {
         let B = if B.is_some() { B } else { self.B.as_ref() };
         let F = F.unwrap_or(&self.F);
@@ -103,7 +120,7 @@ impl KalmanFilter {
     }
 
     /// Add a new measurement (z) to the Kalman filter.
-    pub fn update(&mut self, z: &DMatrix<f32>, R: Option<&DMatrix<f32>>, H: Option<&DMatrix<f32>>) {
+    pub fn update(&mut self, z: &DMatrix<T>, R: Option<&DMatrix<T>>, H: Option<&DMatrix<T>>) {
         let R = R.unwrap_or(&self.R);
         let H = H.unwrap_or(&self.H);
 
@@ -112,7 +129,12 @@ impl KalmanFilter {
         let PHT = matrix_dot(&self.P, &H.transpose());
 
         self.S = matrix_dot(&H, &PHT) + R;
-        self.SI = self.S.clone().pseudo_inverse(0.0001).unwrap();
+
+        self.SI = self
+            .S
+            .clone()
+            .pseudo_inverse(T::from_f32(0.00001).unwrap())
+            .unwrap();
         self.K = matrix_dot(&PHT, &self.SI);
         self.x = matrix_add(&self.x, &matrix_dot(&self.K, &self.y));
 
@@ -131,7 +153,7 @@ impl KalmanFilter {
         self.P_post = self.P.clone();
     }
 
-    pub fn predict_steadystate(&mut self, u: Option<&DMatrix<f32>>, B: Option<&DMatrix<f32>>) {
+    pub fn predict_steadystate(&mut self, u: Option<&DMatrix<T>>, B: Option<&DMatrix<T>>) {
         let B = if B.is_some() { B } else { self.B.as_ref() };
 
         if B.is_some() && u.is_some() {
@@ -144,7 +166,7 @@ impl KalmanFilter {
         self.P_prior = self.P.clone();
     }
 
-    pub fn update_steadystate(&mut self, z: &DMatrix<f32>) {
+    pub fn update_steadystate(&mut self, z: &DMatrix<T>) {
         self.y = z - &self.H * &self.x;
         self.x = &self.x + &self.K * &self.y;
 
@@ -153,7 +175,7 @@ impl KalmanFilter {
         self.P_post = self.P.clone();
     }
 
-    pub fn get_prediction(&self, u: Option<&DMatrix<f32>>) -> (DMatrix<f32>, DMatrix<f32>) {
+    pub fn get_prediction(&self, u: Option<&DMatrix<T>>) -> (DMatrix<T>, DMatrix<T>) {
         let Q = &self.Q;
         let F = &self.F;
         let P = &self.P;
@@ -173,7 +195,7 @@ impl KalmanFilter {
         (x, P)
     }
 
-    pub fn get_update(&self, z: &DMatrix<f32>) -> (DMatrix<f32>, DMatrix<f32>) {
+    pub fn get_update(&self, z: &DMatrix<T>) -> (DMatrix<T>, DMatrix<T>) {
         let R = &self.R;
         let H = &self.H;
         let P = &self.P;
@@ -190,18 +212,18 @@ impl KalmanFilter {
 
         let x = x + K * y;
 
-        let I_KH = &(DMatrix::<f32>::identity(self.dim_x, self.dim_x) - (K * H));
+        let I_KH = &(DMatrix::<T>::identity(self.dim_x, self.dim_x) - (K * H));
 
         let P = ((I_KH * P) * I_KH.transpose()) + ((K * R) * &K.transpose());
 
         (x, P)
     }
 
-    pub fn residual_of(&self, z: &DMatrix<f32>) -> DMatrix<f32> {
+    pub fn residual_of(&self, z: &DMatrix<T>) -> DMatrix<T> {
         z - (&self.H * &self.x_prior)
     }
 
-    pub fn measurement_of_state(&self, x: &DMatrix<f32>) -> DMatrix<f32> {
+    pub fn measurement_of_state(&self, x: &DMatrix<T>) -> DMatrix<T> {
         &self.H * x
     }
 }
@@ -216,7 +238,7 @@ mod tests {
 
     #[test]
     fn test_univariate_kf_setup() {
-        let mut kf: KalmanFilter = KalmanFilter::new(1, 1, 1);
+        let mut kf: KalmanFilter<f32> = KalmanFilter::new(1, 1, 1);
 
         for i in 0..1000 {
             let zf = i as f32;

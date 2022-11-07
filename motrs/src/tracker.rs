@@ -24,7 +24,10 @@ pub struct Track {
     pub class_id: Option<i64>,
 }
 
-fn get_kalman_object_tracker(model: &Model, x0: &mut Option<na::DMatrix<f32>>) -> KalmanFilter {
+fn get_kalman_object_tracker(
+    model: &Model,
+    x0: &mut Option<na::DMatrix<f32>>,
+) -> KalmanFilter<f32> {
     let mut tracker = KalmanFilter::new(model.state_length, model.measurement_lengths, 0);
 
     tracker.F = model.build_F();
@@ -240,7 +243,7 @@ pub struct KalmanTracker {
     model_kwargs: (f32, Option<ModelKwargs>),
     model: Model,
 
-    _tracker: KalmanFilter,
+    _tracker: KalmanFilter<f32>,
     _base: SingleObjectTracker,
 }
 

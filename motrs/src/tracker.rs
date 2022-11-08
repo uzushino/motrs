@@ -1,4 +1,5 @@
 use nalgebra as na;
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::iter::FromIterator;
@@ -93,7 +94,7 @@ pub trait Tracker {
     fn set_steps_alive(&mut self, new_value: i64) {
         todo!()
     }
-    fn id(&self) -> String {
+    fn id(&self) -> Cow<'static, str> {
         todo!()
     }
     fn score(&self) -> Option<f32> {
@@ -145,11 +146,8 @@ impl SingleObjectTracker {
     }
 
     fn update_class_id(&mut self, class_id: Option<i64>) -> Option<i64> {
-        if class_id.is_none() {
-            return None;
-        }
+        let Some(class_id) = class_id else { return None };
 
-        let class_id = class_id.unwrap();
         let entry = self.class_id_counts.entry(class_id).or_insert(1);
         *entry += 1;
 
@@ -196,8 +194,8 @@ impl Tracker for SingleObjectTracker {
     fn steps_alive(&self) -> i64 {
         self.steps_alive
     }
-    fn id(&self) -> String {
-        self.id.clone()
+    fn id(&self) -> Cow<'static, str> {
+        self.id.clone().into()
     }
     fn score(&self) -> Option<f32> {
         self.score
@@ -329,7 +327,7 @@ impl Tracker for KalmanTracker {
     fn steps_alive(&self) -> i64 {
         self._base.steps_alive()
     }
-    fn id(&self) -> String {
+    fn id(&self) -> Cow<'static, str> {
         self._base.id()
     }
     fn score(&self) -> Option<f32> {
@@ -526,7 +524,7 @@ impl MultiObjectTracker {
             {
                 let tracker = &mut self.trackers[track_idx as usize];
                 tracker.update(det);
-                self.detections_matched_ids[det_idx as usize] = tracker.id();
+                self.detections_matched_ids[det_idx as usize] = tracker.id().to_string();
             }
         }
 
@@ -549,10 +547,9 @@ impl MultiObjectTracker {
         for det_idx in diff {
             let det = &detections[*det_idx as usize];
             let tracker = self.tracker_clss(None, det._box.clone(), det.clone());
-            let tracker_id = tracker.id();
             let det_id: usize = det_idx.clone() as usize;
 
-            self.detections_matched_ids[det_id] = tracker_id;
+            self.detections_matched_ids[det_id] = tracker.id().to_string();
             self.trackers.push(tracker);
         }
 
@@ -611,7 +608,7 @@ impl MultiObjectTracker {
 
             if cond1 && cond2 && cond3 {
                 let t = Track {
-                    id: tr.id(),
+                    id: tr.id().to_string(),
                     _box: tr._box(),
                     score: tr.score(),
                     class_id: tr.class_id(),

@@ -66,7 +66,9 @@ fn test_simple_tracking_objects_1() {
                 let (gidx, tidx) = (matches[(m, 0)], matches[(m, 1)]);
                 let track_id = mot.trackers[tidx as usize].id();
 
-                history.get_mut(&(gidx as i64)).map(|f| f.push(track_id));
+                history
+                    .get_mut(&(gidx as i64))
+                    .map(|f| f.push(track_id.to_string()));
             }
         }
 

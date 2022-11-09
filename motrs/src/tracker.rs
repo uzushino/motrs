@@ -281,7 +281,7 @@ impl KalmanTracker {
 
 impl Tracker for KalmanTracker {
     fn _box(&self) -> TrackBox {
-        self.model.x_to_box(self._tracker.x.clone())
+        self.model.x_to_box(&self._tracker.x)
     }
 
     fn is_invalid(&self) -> bool {
@@ -294,7 +294,7 @@ impl Tracker for KalmanTracker {
     }
 
     fn _predict(&mut self) {
-        self._tracker.predict(None, None, None, None);
+        self._tracker.predict();
         self._base.steps_alive += 1;
     }
 

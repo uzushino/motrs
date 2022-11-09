@@ -3,6 +3,7 @@ use crate::matrix::*;
  * Refer: https://github.com/MichaelMauderer/filter-rs
  */
 use nalgebra::DMatrix;
+use nalgebra::Matrix5xX;
 use nalgebra::Scalar;
 use nalgebra::{ComplexField, RealField};
 use num_traits::{Float, Num, One, Zero};
@@ -96,24 +97,13 @@ impl<
         }
     }
 
-    pub fn predict(
-        &mut self,
-        u: Option<&DMatrix<T>>,
-        B: Option<&DMatrix<T>>,
-        F: Option<&DMatrix<T>>,
-        Q: Option<&DMatrix<T>>,
-    ) {
-        let B = if B.is_some() { B } else { self.B.as_ref() };
-        let F = F.unwrap_or(&self.F);
-        let Q = Q.unwrap_or(&self.Q);
+    pub fn predict(&mut self) {
+        let b = &self.B;
+        let f = &self.F;
+        let q = &self.Q;
 
-        if B.is_some() && u.is_some() {
-            self.x = matrix_dot(&F, &self.x) + matrix_dot(B.unwrap(), u.unwrap());
-        } else {
-            self.x = matrix_dot(&F, &self.x);
-        }
-
-        self.P = matrix_dot(&matrix_dot(&F, &self.P), &F.transpose()) * self.alpha_sq + Q;
+        self.x = matrix_dot(&f, &self.x);
+        self.P = matrix_dot(&matrix_dot(&f, &self.P), &f.transpose()) * self.alpha_sq + q;
 
         self.x_prior = self.x.clone();
         self.P_prior = self.P.clone();
@@ -125,11 +115,9 @@ impl<
         let H = H.unwrap_or(&self.H);
 
         self.y = z - matrix_dot(&H, &self.x);
-
         let PHT = matrix_dot(&self.P, &H.transpose());
 
         self.S = matrix_dot(&H, &PHT) + R;
-
         self.SI = self
             .S
             .clone()
@@ -183,15 +171,13 @@ impl<
 
         let B = self.B.as_ref();
         let x = {
-            if B.is_some() && u.is_some() {
-                F * &self.x + B.unwrap() * u.unwrap()
-            } else {
-                F * &self.x
+            match (B, u) {
+                (Some(b), Some(u)) => F * &self.x + b * u,
+                _ => F * &self.x
             }
         };
 
         let P = ((F * P) * FT) * self.alpha_sq + Q;
-
         (x, P)
     }
 
@@ -202,18 +188,14 @@ impl<
         let x = &self.x;
 
         let y = z - H * &self.x;
-
         let PHT = &(P * H.transpose());
 
         let S = H * PHT + R;
         let SI = S.try_inverse().unwrap();
 
         let K = &(PHT * SI);
-
         let x = x + K * y;
-
         let I_KH = &(DMatrix::<T>::identity(self.dim_x, self.dim_x) - (K * H));
-
         let P = ((I_KH * P) * I_KH.transpose()) + ((K * R) * &K.transpose());
 
         (x, P)
@@ -244,7 +226,7 @@ mod tests {
             let zf = i as f32;
             let z = dmatrix!(zf);
 
-            kf.predict(None, None, None, None);
+            kf.predict();
             kf.update(&z, None, None);
 
             assert_approx_eq!(zf, kf.z.clone().unwrap()[0]);

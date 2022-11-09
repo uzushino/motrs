@@ -323,7 +323,7 @@ impl Model {
         x
     }
 
-    pub fn x_to_box(&self, x: na::DMatrix<f32>) -> na::DMatrix<f32> {
+    pub fn x_to_box(&self, x: &na::DMatrix<f32>) -> na::DMatrix<f32> {
         let size = max(self.dim_pos, self.dim_size);
 
         let mut xs = Vec::default();
@@ -494,8 +494,7 @@ mod test {
         let x = model.box_to_x(_box.clone());
         assert!(na::dmatrix![15., 0., 20., 0., 10., 20.] == x);
 
-        let box_ret = model.x_to_box(x);
-
+        let box_ret = model.x_to_box(&x);
         assert!(box_ret == _box);
 
         let kwargs = ModelKwargs {
@@ -511,7 +510,7 @@ mod test {
 
         assert!(na::dmatrix![15., 0., 20., 0., 25., 0., 10., 20., 30.] == x);
 
-        let box_ret = model.x_to_box(x);
+        let box_ret = model.x_to_box(&x);
         assert!(box_ret == _box);
     }
 

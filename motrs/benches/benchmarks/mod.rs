@@ -30,13 +30,15 @@ pub fn step(c: &mut Criterion) {
             let mut _box = na::DMatrix::from_row_slice(1, 4, &[1., 1., 1., 1.]);
 
             for _ in 0..2 {
-                _box = _box.clone() + na::DMatrix::from_row_slice(1, 4, &[1., 1., 1., 1.]);
+                _box = _box + na::DMatrix::from_row_slice(1, 4, &[1., 1., 1., 1.]);
+
                 let det = Detection {
                     _box: Some(_box.clone()),
                     score: 1.,
                     class_id: 1,
                     feature: None,
                 };
+
                 tracker.step(vec![det]);
             }
         })

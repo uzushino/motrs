@@ -7,7 +7,7 @@ jobs:
       RUSTC_FORCE_INCREMENTAL: 1
     steps:
       - uses: actions/checkout@v2
-      - uses: ./.github/actions/cache_cargo
+      # - uses: ./.github/actions/cache_cargo
       - name: build
         run: cargo build
   fmt:

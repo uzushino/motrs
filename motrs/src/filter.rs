@@ -173,7 +173,7 @@ impl<
         let x = {
             match (B, u) {
                 (Some(b), Some(u)) => F * &self.x + b * u,
-                _ => F * &self.x
+                _ => F * &self.x,
             }
         };
 

@@ -1,5 +1,7 @@
 on: push
 
+name: CI
+
 jobs:
   build_cache:
     runs-on: ubuntu-latest
@@ -49,25 +51,29 @@ jobs:
           command: fmt
           args: --all -- --check
 
-  # clippy:
-  #   runs-on: ubuntu-latest
-  #   env:
-  #     RUSTC_FORCE_INCREMENTAL: 1
-  #   needs: build_cache
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - run: rustup component add clippy
-  #     - uses: ./.github/actions/cache_cargo
-  #     - name: clippy
-  #       run: cargo clippy -- -D warnings
-
-  test:
+  clippy:
     runs-on: ubuntu-latest
-
     env:
       RUSTC_FORCE_INCREMENTAL: 1
     needs: build_cache
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: ./.github/actions/cache_cargo
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: -- -D warnings
 
+  test:
+    runs-on: ubuntu-latest
+    env:
+      RUSTC_FORCE_INCREMENTAL: 1
+    needs: build_cache
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1

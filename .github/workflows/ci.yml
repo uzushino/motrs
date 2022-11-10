@@ -8,8 +8,14 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/cache_cargo
-      - name: build
-        run: cargo build
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
 
   check:
     runs-on: ubuntu-latest

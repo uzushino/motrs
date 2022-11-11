@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 
+use na::RealField;
 use na::Scalar;
 use nalgebra as na;
 use num_traits::Zero;
@@ -19,7 +20,7 @@ pub fn matrix_to_vec<T: Copy>(mat: &na::DMatrix<T>) -> Vec<T> {
 
 pub fn matrix_split<T>(mat: &na::DMatrix<T>, indecies_num: usize) -> Vec<na::DMatrix<T>>
 where
-    T: Zero + Debug + Clone + Scalar + Copy,
+    T: RealField + Copy,
 {
     let c = mat.ncols() / indecies_num;
     let r = mat.nrows() / c;
@@ -35,7 +36,7 @@ where
 
 pub fn create_matrix_broadcasting<T>(rows: usize, cols: usize, a: &na::DMatrix<T>) -> na::DMatrix<T>
 where
-    T: Zero + Debug + Clone + Scalar + Copy,
+    T: RealField + Copy,
 {
     if a.ncols() == 1 && a.nrows() == 1 {
         na::DMatrix::from_fn(rows, cols, |_r, _c| a[(0, 0)])
@@ -49,7 +50,7 @@ where
 pub fn matrix_broadcasting<F, T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>, f: F) -> na::DMatrix<T>
 where
     F: Fn(usize, usize, &na::DMatrix<T>, &na::DMatrix<T>) -> T,
-    T: num_traits::Num + Zero + Debug + Copy + Scalar,
+    T: RealField + Copy,
 {
     if a.ncols() == b.ncols() && a.nrows() == b.nrows() {
         let cols = a.ncols();
@@ -105,45 +106,44 @@ pub fn matrix_minimum(a: &na::DMatrix<f32>, b: &na::DMatrix<f32>) -> na::DMatrix
 
 pub fn matrix_add<T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T>
 where
-    T: num_traits::Num + Zero + Debug + Copy + Scalar,
+    T: RealField + Copy,
 {
     matrix_broadcasting(a, b, |r, c, a, b| a[(r, c)] + b[(r, c)])
 }
 
 pub fn matrix_sub<T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T>
 where
-    T: num_traits::Num + Zero + Debug + Copy + Scalar,
+    T: RealField + Copy,
 {
     matrix_broadcasting(a, b, |r, c, a, b| a[(r, c)] - b[(r, c)])
 }
 
 pub fn matrix_mul<T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T>
 where
-    T: num_traits::Num + Zero + Debug + Copy + Scalar,
+    T: RealField + Copy,
 {
     matrix_broadcasting(a, b, |r, c, a, b| a[(r, c)] * b[(r, c)])
 }
 
 pub fn matrix_div<T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T>
 where
-    T: num_traits::Num + Zero + Debug + Copy + Scalar,
+    T: RealField + Copy,
 {
     matrix_broadcasting(a, b, |r, c, a, b| a[(r, c)] / b[(r, c)])
 }
 
-pub fn matrix_dot<T: num_traits::Num + num_traits::Float + Debug + Scalar>(
-    a: &na::DMatrix<T>,
-    b: &na::DMatrix<T>,
-) -> na::DMatrix<T> {
+pub fn matrix_dot<T: RealField + Copy>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T> {
     if b.nrows() == 1 {
         let mut mat: na::DMatrix<T> = na::DMatrix::repeat(1, a.nrows(), T::zero());
         for r in 0..a.nrows() {
-            let mut total = 0.0;
+            let mut total = T::zero();
+
             for c in 0..b.ncols() {
-                total += (a[(r, c)] * b[(0, c)]).to_f32().unwrap_or_default();
+                total += a[(r, c)] * b[(0, c)];
             }
-            mat[(0, r)] = num_traits::NumCast::from(total).unwrap();
+            mat[(0, r)] = total;
         }
+
         mat
     } else if b.ncols() == 1 {
         let b = create_matrix_broadcasting(b.nrows(), a.ncols(), &b);
@@ -154,19 +154,13 @@ pub fn matrix_dot<T: num_traits::Num + num_traits::Float + Debug + Scalar>(
             let col = a.row(r);
             let row = b.column(c);
 
-            let col = na::DMatrix::from_fn(col.nrows(), col.ncols(), |r, c| {
-                col[(r, c)].to_f32().unwrap_or_default()
-            });
-            let row = na::DMatrix::from_fn(row.nrows(), row.ncols(), |r, c| {
-                row[(r, c)].to_f32().unwrap_or_default()
-            });
+            let col = na::DMatrix::from_fn(col.nrows(), col.ncols(), |r, c| col[(r, c)]);
+            let row = na::DMatrix::from_fn(row.nrows(), row.ncols(), |r, c| row[(r, c)]);
 
             (col * row).sum()
         });
 
-        na::DMatrix::from_fn(mat.nrows(), mat.ncols(), |r, c| {
-            num_traits::NumCast::from(mat[(r, c)]).unwrap()
-        })
+        mat
     }
 }
 
@@ -203,11 +197,12 @@ mod test {
 
     #[test]
     fn test_broadcasting() {
-        let a = na::DMatrix::from_row_slice(2, 3, &[2, 4, 6, 8, 10, 12]);
-        let b = na::DMatrix::from_row_slice(2, 1, &[10, 100]);
+        let a = na::DMatrix::from_row_slice(2, 3, &[2., 4., 6., 8., 10., 12.]);
+        let b = na::DMatrix::from_row_slice(2, 1, &[10., 100.]);
 
         assert!(
-            matrix_add(&a, &b) == na::DMatrix::from_row_slice(2, 3, &[12, 14, 16, 108, 110, 112])
+            matrix_add(&a, &b)
+                == na::DMatrix::from_row_slice(2, 3, &[12., 14., 16., 108., 110., 112.])
         );
     }
 

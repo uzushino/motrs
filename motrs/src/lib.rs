@@ -1,7 +1,7 @@
 use std::ops::Mul;
 
 use nalgebra as na;
-use nalgebra::{RealField};
+use nalgebra::RealField;
 
 pub mod matrix;
 pub mod model;
@@ -56,10 +56,15 @@ pub fn Q_discrete_white_noise<T: RealField + Mul>(
         ],
     };
 
-    order_by_derivative(Q, dim, block_size).map(|v| T::from_f32(v).unwrap_or(T::zero())) * T::from_f32(var).unwrap_or(T::zero())
+    order_by_derivative(Q, dim, block_size).map(|v| T::from_f32(v).unwrap_or(T::zero()))
+        * T::from_f32(var).unwrap_or(T::zero())
 }
 
-fn order_by_derivative<T: RealField + Copy>(q: Vec<Vec<T>>, dim: usize, block_size: usize) -> na::DMatrix<T> {
+fn order_by_derivative<T: RealField + Copy>(
+    q: Vec<Vec<T>>,
+    dim: usize,
+    block_size: usize,
+) -> na::DMatrix<T> {
     let n = dim * block_size;
     let mut d = na::DMatrix::<T>::zeros(n, n);
 

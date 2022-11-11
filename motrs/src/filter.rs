@@ -6,6 +6,7 @@ use nalgebra::DMatrix;
 use nalgebra::Matrix5xX;
 use nalgebra::Scalar;
 use nalgebra::{ComplexField, RealField};
+use num_traits::real::Real;
 use num_traits::{Float, Num, One, Zero};
 use std::ops::AddAssign;
 use std::{fmt::Debug, ops::Add};
@@ -37,19 +38,7 @@ pub struct KalmanFilter<T> {
 }
 
 #[allow(non_snake_case)]
-impl<
-        T: Zero
-            + Debug
-            + Clone
-            + Scalar
-            + Copy
-            + One
-            + Float
-            + Num
-            + AddAssign
-            + ComplexField<RealField = T>,
-    > KalmanFilter<T>
-{
+impl<T: RealField + Copy> KalmanFilter<T> {
     pub fn new(dim_x: usize, dim_z: usize, dim_u: usize) -> Self {
         let x = DMatrix::<T>::from_element(1, dim_x, T::zero());
         let P = DMatrix::<T>::identity(dim_x, dim_x);

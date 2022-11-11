@@ -1,4 +1,7 @@
+use std::ops::Mul;
+
 use nalgebra as na;
+use nalgebra::{RealField};
 
 pub mod matrix;
 pub mod model;
@@ -10,13 +13,13 @@ mod metrics;
 
 use crate::tracker::Track;
 
-pub fn Q_discrete_white_noise(
+pub fn Q_discrete_white_noise<T: RealField + Mul>(
     dim: usize,
     dt: f32,
     var: f32,
     block_size: usize,
     order_by_dim: bool,
-) -> na::DMatrix<f32> {
+) -> na::DMatrix<T> {
     if !vec![2, 3, 4].contains(&dim) {
         panic!();
     }
@@ -53,15 +56,15 @@ pub fn Q_discrete_white_noise(
         ],
     };
 
-    order_by_derivative(Q, dim, block_size) * var
+    order_by_derivative(Q, dim, block_size).map(|v| T::from_f32(v).unwrap_or(T::zero())) * T::from_f32(var).unwrap_or(T::zero())
 }
 
-fn order_by_derivative(q: Vec<Vec<f32>>, dim: usize, block_size: usize) -> na::DMatrix<f32> {
+fn order_by_derivative<T: RealField + Copy>(q: Vec<Vec<T>>, dim: usize, block_size: usize) -> na::DMatrix<T> {
     let n = dim * block_size;
-    let mut d = na::DMatrix::<f32>::zeros(n, n);
+    let mut d = na::DMatrix::<T>::zeros(n, n);
 
-    for (i, x) in q.iter().flatten().enumerate() {
-        let f = na::DMatrix::identity(block_size, block_size) * *x;
+    for (i, &x) in q.iter().flatten().enumerate() {
+        let f = na::DMatrix::identity(block_size, block_size) * x;
         let ix = (i / dim) * block_size;
         let iy = (i % dim) * block_size;
 
@@ -78,7 +81,6 @@ pub fn tracker_to_string(track: Track) -> String {
     } else {
         -1.
     };
-
     format!(
         "ID: {} | S: {} | C: {}",
         track.id,

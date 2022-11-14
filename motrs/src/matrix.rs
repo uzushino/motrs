@@ -53,17 +53,7 @@ where
     T: RealField + Copy,
 {
     if a.ncols() == b.ncols() && a.nrows() == b.nrows() {
-        let cols = a.ncols();
-        let rows = a.nrows();
-        let mut result = na::DMatrix::zeros(rows, cols);
-
-        for r in 0..rows {
-            for c in 0..cols {
-                result[(r, c)] = f(r, c, a, b);
-            }
-        }
-
-        result
+        na::DMatrix::from_fn(a.nrows(), a.ncols(), |r, c| f(r, c, a, b))
     } else {
         let a = if a.nrows() == 1 && a.ncols() == 1 {
             na::DMatrix::repeat(b.nrows(), b.ncols(), a[(0, 0)])
@@ -74,6 +64,7 @@ where
         } else {
             a.clone()
         };
+
         let b = if b.nrows() == 1 && b.ncols() == 1 {
             na::DMatrix::repeat(a.nrows(), a.ncols(), b[(0, 0)])
         } else if b.nrows() == 1 {

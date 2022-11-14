@@ -14,11 +14,11 @@ A minimal implementation of [motpy](https://github.com/wmuron/motpy) in pure rus
 
 ## See also
 
-- Original project
+- Original project  
 https://github.com/wmuron/motpy
 
-- Rust kalman filter
+- Rust kalman filter  
  https://github.com/MichaelMauderer/filter-rs
 
-- Solution of assignment problems (Hungarian Method)
+- Solution of assignment problems (Hungarian Method)  
 https://github.com/nwtnni/hungarian

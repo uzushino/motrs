@@ -216,11 +216,7 @@ impl Model {
             .map(|sidx| dim_pos * (order_pos + 1) + sidx * (order_size + 1))
             .collect();
 
-        (
-            pos_idxs,
-            size_idxs,
-            offset_idx
-        )
+        (pos_idxs, size_idxs, offset_idx)
     }
 
     pub fn build_F(&self) -> na::DMatrix<f32> {

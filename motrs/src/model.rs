@@ -1,16 +1,13 @@
-use crate::Q_discrete_white_noise;
-use na::Scalar;
 use nalgebra as na;
 use std::cmp::max;
 use std::fmt::Debug;
-use std::ops::Add;
 
 #[derive(Default)]
 pub struct ModelPreset {
     pub order_pos: i32,
     pub dim_pos: i32,
-    pub order_size: i32,
-    pub dim_size: i32,
+    pub order_size: usize,
+    pub dim_size: usize,
 }
 
 impl ModelPreset {
@@ -46,7 +43,7 @@ fn base_dim_block<T: num_traits::NumCast + na::RealField>(dt: T, order: usize) -
         na::DMatrix::from_row_slice(3, 3, &[1., dt, (dt.powf(2.)) / 2., 0., 1., dt, 0., 0., 1.]);
 
     let cutoff = order + 1;
-    na::DMatrix::from_fn(cutoff, cutoff, |r, c| T::from_f64(block[(r, c)]).unwrap())
+    na::DMatrix::from_fn(cutoff, cutoff, |r, c| T::from_f32(block[(r, c)]).unwrap())
 }
 
 fn zero_pad<T: na::RealField>(arr: na::DMatrix<T>, length: usize) -> na::DMatrix<T> {
@@ -134,8 +131,8 @@ pub struct Model {
 pub struct ModelKwargs {
     pub order_pos: i32,
     pub dim_pos: i32,
-    pub order_size: i32,
-    pub dim_size: i32,
+    pub order_size: usize,
+    pub dim_size: usize,
     pub q_var_pos: f32,
     pub q_var_size: f32,
     pub r_var_pos: f32,
@@ -174,8 +171,14 @@ impl Model {
         let p_cov_p0 = kwargs.p_cov_p0;
 
         let dim_box = 2 * max(dim_pos, dim_size);
-        let (pos_idxs, size_idxs, z_in_x_ids, offset_idx) =
+        let (pos_idxs, size_idxs, offset_idx) =
             Self::_calc_idxs(dim_pos, dim_size, order_pos, order_size);
+
+        let z_in_x_ids = pos_idxs
+            .iter()
+            .chain(&size_idxs)
+            .cloned()
+            .collect::<Vec<_>>();
 
         let state_length = dim_pos * (order_pos + 1) + dim_size * (order_size + 1);
         let measurement_lengths = dim_pos + dim_size;
@@ -206,16 +209,18 @@ impl Model {
         dim_size: usize,
         order_pos: usize,
         order_size: usize,
-    ) -> (Vec<usize>, Vec<usize>, Vec<usize>, usize) {
+    ) -> (Vec<usize>, Vec<usize>, usize) {
         let offset_idx = max(dim_pos, dim_size);
         let pos_idxs: Vec<usize> = (0..dim_pos).map(|pidx| pidx * (order_pos + 1)).collect();
         let size_idxs: Vec<usize> = (0..dim_size)
             .map(|sidx| dim_pos * (order_pos + 1) + sidx * (order_size + 1))
             .collect();
-        let mut z_in_idxs = pos_idxs.clone();
-        z_in_idxs.append(&mut size_idxs.clone());
 
-        (pos_idxs, size_idxs, z_in_idxs, offset_idx)
+        (
+            pos_idxs,
+            size_idxs,
+            offset_idx
+        )
     }
 
     pub fn build_F(&self) -> na::DMatrix<f32> {
@@ -238,29 +243,24 @@ impl Model {
 
     pub fn build_Q(&self) -> na::DMatrix<f32> {
         let var_pos = self.q_var_pos;
-        let var_size = self.q_var_size;
+        let var_size = self.q_var_size as f32;
 
         let q_pos = if self.order_pos == 0 {
             na::dmatrix![var_pos]
         } else {
-            Q_discrete_white_noise(self.order_pos + 1, self.dt, var_pos, 1, true)
+            crate::Q_discrete_white_noise(self.order_pos + 1, self.dt, var_pos, 1, true)
         };
 
         let q_size = if self.order_size == 0 {
             na::dmatrix![var_size]
         } else {
-            Q_discrete_white_noise(self.order_size + 1, self.dt, var_size, 1, true)
+            crate::Q_discrete_white_noise(self.order_size + 1, self.dt, var_size, 1, true)
         };
 
         let diag_components = {
-            let _block_pos = repeat_vec(vec![q_pos], self.dim_pos);
-            let _block_size = repeat_vec(vec![q_size], self.dim_size);
-            let mut diag_components = Vec::new();
-
-            diag_components.extend(_block_pos);
-            diag_components.extend(_block_size);
-
-            diag_components
+            let block_pos = repeat_vec(vec![q_pos], self.dim_pos);
+            let block_size = repeat_vec(vec![q_size], self.dim_size);
+            block_pos.into_iter().chain(block_size).collect()
         };
 
         block_diag(diag_components)
@@ -268,23 +268,14 @@ impl Model {
 
     pub fn build_H(&self) -> na::DMatrix<f32> {
         fn _base_block(order: usize) -> na::DMatrix<f32> {
-            let mut diag_components = Vec::new();
-
             let a = vec![1.];
             let b = repeat_vec(vec![0.], order);
-
-            diag_components.extend(a);
-            diag_components.extend(b);
-
-            na::DMatrix::from_vec(1, order + 1, diag_components)
+            na::DMatrix::from_vec(1, order + 1, a.into_iter().chain(b).collect::<Vec<_>>())
         }
 
-        let _block_pos = repeat_vec(vec![_base_block(self.order_pos)], self.dim_pos);
-        let _block_size = repeat_vec(vec![_base_block(self.order_size)], self.dim_size);
-        let mut diag_components = Vec::new();
-
-        diag_components.extend(_block_pos);
-        diag_components.extend(_block_size);
+        let block_pos = repeat_vec(vec![_base_block(self.order_pos)], self.dim_pos);
+        let block_size = repeat_vec(vec![_base_block(self.order_size)], self.dim_size);
+        let diag_components = block_pos.into_iter().chain(block_size).collect();
 
         block_diag(diag_components)
     }
@@ -296,7 +287,7 @@ impl Model {
 
     pub fn build_R(&self) -> na::DMatrix<f32> {
         let block_pos = eye(self.dim_pos) * self.r_var_pos;
-        let block_size = eye(self.dim_size) * self.r_var_size;
+        let block_size = eye(self.dim_size) * (self.r_var_size as f32);
 
         block_diag(vec![block_pos, block_size])
     }

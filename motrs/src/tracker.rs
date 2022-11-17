@@ -349,7 +349,7 @@ trait BaseMatchingFunction {
         &self,
         trackers: &[Box<dyn Tracker + Send + Sync>],
         detections: &[Detection],
-    ) -> na::DMatrix<f32>;
+    ) -> na::DMatrix<usize>;
 }
 
 pub struct IOUAndFeatureMatchingFunction {
@@ -394,7 +394,7 @@ impl BaseMatchingFunction for IOUAndFeatureMatchingFunction {
         &self,
         trackers: &[Box<dyn Tracker + Send + Sync>],
         detections: &[Detection],
-    ) -> na::DMatrix<f32> {
+    ) -> na::DMatrix<usize> {
         match_by_cost_matrix(
             trackers,
             detections,
@@ -487,7 +487,8 @@ impl MultiObjectTracker {
         det: Detection,
     ) -> Box<impl Tracker + Send + Sync> {
         let mut kwargs = self.tracker_kwargs.clone().unwrap_or_default();
-        kwargs.score0 = Some(det.score.clone());
+
+        kwargs.score0 = Some(det.score);
         kwargs.class_id0 = Some(det.class_id);
 
         Box::new(KalmanTracker::new(
@@ -519,25 +520,21 @@ impl MultiObjectTracker {
         for c in 0..matches.nrows() {
             let track_idx = matches[(c, 0)];
             let det_idx = matches[(c, 1)];
-            let det = &detections[det_idx as usize];
+            let det = &detections[det_idx];
 
-            {
-                let tracker = &mut self.trackers[track_idx as usize];
-                tracker.update(det);
-                self.detections_matched_ids[det_idx as usize] = tracker.id().to_string();
-            }
+            let tracker = &mut self.trackers[track_idx as usize];
+            tracker.update(det);
+            self.detections_matched_ids[det_idx as usize] = tracker.id().to_string();
         }
 
-        let assigned_det_idxs: HashSet<u64> = if matches.len() > 0 {
-            let assigned_det_idxs = matches.index((.., 1)).data.into_slice().to_vec();
-            let assigned_det_idxs = assigned_det_idxs.iter().map(|v| *v as u64);
-            HashSet::from_iter(assigned_det_idxs)
+        let assigned_det_idxs: HashSet<usize> = if matches.len() > 0 {
+            let assigned_det_idxs = matches.index((.., 1)).data.into_slice();
+            HashSet::from_iter(assigned_det_idxs.to_vec().into_iter())
         } else {
             HashSet::from_iter(Vec::default())
         };
 
-        let detection_ranges: HashSet<u64> =
-            HashSet::from_iter((0..detections.len()).into_iter().map(|v| v as u64));
+        let detection_ranges: HashSet<usize> = HashSet::from_iter(0..detections.len());
         let mut diff = detection_ranges
             .difference(&assigned_det_idxs)
             .into_iter()
@@ -714,7 +711,7 @@ pub fn match_by_cost_matrix(
         Box<dyn FnOnce(Vec<na::DMatrix<f32>>, Vec<na::DMatrix<f32>>) -> f32>,
     >,
     feature_similarity_beta: Option<f32>,
-) -> na::DMatrix<f32> {
+) -> na::DMatrix<usize> {
     if trackers.len() == 0 || detections.len() == 0 {
         return array!(0, 0, &[]);
     }
@@ -742,7 +739,5 @@ pub fn match_by_cost_matrix(
         }
     }
 
-    let ret = na::DMatrix::from_fn(matches.len(), matches[0].len(), |r, c| matches[r][c] as f32);
-
-    ret
+    na::DMatrix::from_fn(matches.len(), matches[0].len(), |r, c| matches[r][c])
 }

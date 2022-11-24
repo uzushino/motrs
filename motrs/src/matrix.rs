@@ -87,11 +87,17 @@ where
     }
 }
 
-pub fn matrix_maximum(a: &na::DMatrix<f32>, b: &na::DMatrix<f32>) -> na::DMatrix<f32> {
+pub fn matrix_maximum<T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T>
+where
+    T: RealField + Copy,
+{
     matrix_broadcasting(a, b, |r, c, a, b| b[(r, c)].max(a[(r, c)]))
 }
 
-pub fn matrix_minimum(a: &na::DMatrix<f32>, b: &na::DMatrix<f32>) -> na::DMatrix<f32> {
+pub fn matrix_minimum<T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T>
+where
+    T: RealField + Copy,
+{
     matrix_broadcasting(a, b, |r, c, a, b| b[(r, c)].min(a[(r, c)]))
 }
 

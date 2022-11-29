@@ -59,7 +59,7 @@ pub fn calculate_iou(
     matrix_div(&val_inter, &matrix_clip(&tmp, Some(0.), None))
 }
 
-pub fn _sequence_has_none(seq: &Vec<Option<na::DMatrix<f32>>>) -> bool {
+pub fn _sequence_has_none<T>(seq: &Vec<Option<T>>) -> bool {
     seq.iter().any(|v| v.is_none())
 }
 

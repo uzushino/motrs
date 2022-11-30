@@ -3,13 +3,7 @@ use crate::matrix::*;
  * Refer: https://github.com/MichaelMauderer/filter-rs
  */
 use nalgebra::DMatrix;
-use nalgebra::Matrix5xX;
-use nalgebra::Scalar;
-use nalgebra::{ComplexField, RealField};
-use num_traits::real::Real;
-use num_traits::{Float, Num, One, Zero};
-use std::ops::AddAssign;
-use std::{fmt::Debug, ops::Add};
+use nalgebra::RealField;
 
 #[allow(non_snake_case)]
 #[derive(Debug)]

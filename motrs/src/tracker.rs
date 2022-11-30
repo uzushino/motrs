@@ -673,9 +673,8 @@ fn cost_matrix_iou_feature(
     let b2 = na::DMatrix::from_row_slice(r2, c2, data.as_slice());
     let inferred_dim = b1.shape().1 / 2;
     let iou_mat = calculate_iou(b1, b2, inferred_dim);
-    let mut apt_mat = iou_mat.clone();
 
-    if feature_similarity_beta.is_some() {
+    let apt_mat = if feature_similarity_beta.is_some() {
         let f1 = trackers.iter().map(|t| (*t)._feature()).collect::<Vec<_>>();
         let f2 = detections
             .iter()
@@ -683,7 +682,7 @@ fn cost_matrix_iou_feature(
             .collect::<Vec<_>>();
 
         if _sequence_has_none(&f1) || _sequence_has_none(&f2) {
-            apt_mat = iou_mat.clone();
+            iou_mat
         } else {
             let f1 = f1.into_iter().map(|v| v.unwrap()).collect();
             let f2 = f2.into_iter().map(|v| v.unwrap()).collect();
@@ -692,14 +691,14 @@ fn cost_matrix_iou_feature(
             let feature_similarity_beta = feature_similarity_beta.unwrap_or_default();
             let sim_mat = feature_similarity_beta + (1. - feature_similarity_beta) * sim_mat;
 
-            apt_mat = iou_mat.clone() * sim_mat;
+            iou_mat * sim_mat
         }
     } else {
-        apt_mat = iou_mat.clone();
-    }
+        iou_mat
+    };
 
-    let cost_mat = -1. * apt_mat;
-    (cost_mat, iou_mat.clone())
+    let cost_mat = -1. * apt_mat.clone();
+    (cost_mat, apt_mat)
 }
 
 pub fn match_by_cost_matrix(

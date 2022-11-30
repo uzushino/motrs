@@ -41,14 +41,8 @@ pub fn calculate_iou(
         let tmp = matrix_maximum(&sub, &zero);
 
         val_inter = matrix_mul(&tmp, &val_inter);
-        val_b1 = matrix_mul(
-            &(&coords_b1[d + dim] - &coords_b1[d]),
-            &val_b1,
-        );
-        val_b2 = matrix_mul(
-            &val_b2,
-            &(&coords_b2[d + dim] - &coords_b2[d]),
-        );
+        val_b1 = matrix_mul(&(&coords_b1[d + dim] - &coords_b1[d]), &val_b1);
+        val_b2 = matrix_mul(&val_b2, &(&coords_b2[d + dim] - &coords_b2[d]));
     }
 
     let tmp = matrix_sub(

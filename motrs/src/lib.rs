@@ -1,7 +1,6 @@
 use std::ops::Mul;
 
-use nalgebra as na;
-use nalgebra::RealField;
+use ndarray as nd;
 
 pub mod matrix;
 pub mod model;
@@ -13,13 +12,13 @@ mod metrics;
 
 use crate::tracker::Track;
 
-pub fn Q_discrete_white_noise<T: RealField + Mul>(
+pub fn Q_discrete_white_noise<T>(
     dim: usize,
     dt: f32,
     var: f32,
     block_size: usize,
     order_by_dim: bool,
-) -> na::DMatrix<T> {
+) -> nd::Array2<T> {
     if !vec![2, 3, 4].contains(&dim) {
         panic!();
     }
@@ -60,16 +59,16 @@ pub fn Q_discrete_white_noise<T: RealField + Mul>(
         * T::from_f32(var).unwrap_or(T::zero())
 }
 
-fn order_by_derivative<T: RealField + Copy>(
+fn order_by_derivative<T>(
     q: Vec<Vec<T>>,
     dim: usize,
     block_size: usize,
-) -> na::DMatrix<T> {
+) -> nd::Array2<T> {
     let n = dim * block_size;
-    let mut d = na::DMatrix::<T>::zeros(n, n);
+    let mut d = nd::Array2::<T>::zeros(n);
 
     for (i, &x) in q.iter().flatten().enumerate() {
-        let f = na::DMatrix::identity(block_size, block_size) * x;
+        let f = nd::Array2(block_size, block_size) * x;
         let ix = (i / dim) * block_size;
         let iy = (i % dim) * block_size;
 

@@ -1,6 +1,6 @@
-use nalgebra as na;
 use std::cmp::max;
 use std::fmt::Debug;
+use ndarray as nd;
 
 #[derive(Default)]
 pub struct ModelPreset {
@@ -36,14 +36,12 @@ impl ModelPreset {
     }
 }
 
-fn base_dim_block<T: num_traits::NumCast + na::RealField>(dt: T, order: usize) -> na::DMatrix<T> {
+fn base_dim_block<T>(dt: T, order: usize) -> nd::Array2<T> {
     let dt: f32 = dt.to_f32().unwrap_or_default();
-
-    let block =
-        na::DMatrix::from_row_slice(3, 3, &[1., dt, (dt.powf(2.)) / 2., 0., 1., dt, 0., 0., 1.]);
-
+    let block = nd::Array::from_shape_vec((3, 3), vec![1., dt, (dt.powf(2.)) / 2., 0., 1., dt, 0., 0., 1.]).unwrap();
     let cutoff = order + 1;
-    na::DMatrix::from_fn(cutoff, cutoff, |r, c| T::from_f32(block[(r, c)]).unwrap())
+
+    nd::Array::from_shape_fn((cutoff, cutoff), |(r, c)| T::from_f32(block[[r, c]]).unwrap())
 }
 
 fn zero_pad<T: na::RealField>(arr: na::DMatrix<T>, length: usize) -> na::DMatrix<T> {

@@ -44,9 +44,10 @@ fn base_dim_block<T>(dt: T, order: usize) -> nd::Array2<T> {
     nd::Array::from_shape_fn((cutoff, cutoff), |(r, c)| T::from_f32(block[[r, c]]).unwrap())
 }
 
-fn zero_pad<T: na::RealField>(arr: na::DMatrix<T>, length: usize) -> na::DMatrix<T> {
-    let mut ret = na::DMatrix::zeros(1, length);
-    ret.index_mut((.., ..arr.shape().1)).copy_from(&arr);
+fn zero_pad<T>(arr: &nd::Array2<T>, length: usize) -> nd::Array2<T> {
+    let n_cols = arr.shape()[1];
+    let mut ret = nd::Array::zeros((1, length));
+    ret.slice_mut(nd::s![.., ..n_cols]).assign(arr);
     ret
 }
 
@@ -58,41 +59,18 @@ fn repeat_vec<T: Clone>(x: Vec<T>, size: usize) -> Vec<T> {
         .collect::<Vec<_>>()
 }
 
-fn block_diag(arrs: Vec<na::DMatrix<f32>>) -> na::DMatrix<f32> {
-    let shapes = arrs
-        .iter()
-        .map(|m| {
-            let (a, b) = m.shape();
-            vec![a, b]
-        })
-        .collect::<Vec<_>>();
-
-    let sum_shapes = na::DMatrix::from_row_slice(
-        arrs.len(),
-        2,
-        shapes
-            .clone()
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
-            .as_slice(),
-    );
-    let sum_shape = sum_shapes.row_sum();
-
-    let mut out = na::DMatrix::zeros(sum_shape[(0, 0)], sum_shape[(0, 1)]);
+fn block_diag(arrs: Vec<nd::Array2<f32>>) -> nd::Array2<f32> {
+    let shapes = arrs.iter().map(|m| m.shape()).collect::<Vec<_>>();
+    let sum_shapes = shapes.iter().fold((0, 0), |(ra, ca), (rb, cb)| (ra + rb, ca + cb));
+    let mut out = nd::Array2::zeros(sum_shapes);
 
     let mut r = 0;
     let mut c = 0;
 
-    for (i, sh) in shapes.iter().enumerate() {
-        let rr = sh[0];
-        let cc = sh[1];
-        for row in r..(r + rr) {
-            for column in c..(c + cc) {
-                out[(row, column)] = arrs[i][(row - r, column - c)];
-            }
-        }
-        // out.index_mut((r..(r+rr), c..(c+cc))).copy_from(&arrs[i]);
+    for arr in arrs.iter() {
+        let (rr, cc) = arr.shape();
+        let block = arr.to_owned();
+        out.slice_mut(nd::s![r..(r+rr), c..(c+cc)]).assign(&block);
 
         r += rr;
         c += cc;
@@ -101,8 +79,12 @@ fn block_diag(arrs: Vec<na::DMatrix<f32>>) -> na::DMatrix<f32> {
     out
 }
 
-fn eye(block: usize) -> na::DMatrix<f32> {
-    na::DMatrix::identity(block, block)
+fn eye(block: usize) -> nd::Array2<f32> {
+    let mut arr = nd::Array::zeros((block, block));
+    for i in 0..block {
+        arr[[i, i]] = 1.0;
+    }
+    arr
 }
 
 pub struct Model {

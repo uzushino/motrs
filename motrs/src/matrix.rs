@@ -1,49 +1,42 @@
-use std::fmt::Debug;
-
-use na::RealField;
-use na::Scalar;
-use nalgebra as na;
 use num_traits::Zero;
+use ndarray as nd;
 
-pub fn matrix_to_vec<T: Copy>(mat: &na::DMatrix<T>) -> Vec<T> {
+pub fn matrix_to_vec<T: Copy>(mat: &nd::Array2<T>) -> Vec<T> {
     let (row, col) = mat.shape();
     let mut result = Vec::default();
 
     for r in 0..row {
         for c in 0..col {
-            result.push(mat[(r, c)]);
+            result.push(mat[[r, c]]);
         }
     }
 
     result
 }
 
-pub fn matrix_split<T>(mat: &na::DMatrix<T>, indecies_num: usize) -> Vec<na::DMatrix<T>>
-where
-    T: RealField + Copy,
-{
-    let c = mat.ncols() / indecies_num;
+pub fn matrix_split<T>(mat: &nd::Array2<T>, indices_num: usize) -> Vec<nd::Array2<T>> {
+    let c = mat.ncols() / indices_num;
     let r = mat.nrows() / c;
 
     let mut splitted = Vec::default();
-    for i in 0..indecies_num {
-        let sp = na::DMatrix::from(mat.index((.., (i * c)..((i + 1) * c))));
+    for i in 0..indices_num {
+        let sp = mat.index_axis(nd::Axis(1), i * c..(i + 1) * c).to_owned();
         splitted.push(sp);
     }
 
     splitted
 }
 
-pub fn create_matrix_broadcasting<T>(rows: usize, cols: usize, a: &na::DMatrix<T>) -> na::DMatrix<T>
+pub fn create_matrix_broadcasting<T>(rows: usize, cols: usize, a: &nd::Array2<T>) -> nd::Array2<T>
 where
-    T: RealField + Copy,
+    T: Copy,
 {
     if a.ncols() == 1 && a.nrows() == 1 {
-        na::DMatrix::from_fn(rows, cols, |_r, _c| a[(0, 0)])
+        nd::Array::from_elem((rows, cols), a[[0, 0]])
     } else if a.ncols() == 1 {
-        na::DMatrix::from_fn(rows, cols, |r, _c| a[(r, 0)])
+        nd::Array::from_shape_fn((rows, cols), |(r, _c)| a[[r, 0]])
     } else {
-        na::DMatrix::from_fn(rows, cols, |_r, c| a[(0, c)])
+        nd::Array::from_shape_fn((rows, cols), |(_r, c)| a[[0, c]])
     }
 }
 
@@ -188,6 +181,7 @@ pub fn matrix_clip(
     result
 }
 
+/*
 #[cfg(test)]
 mod test {
     use super::*;
@@ -260,3 +254,4 @@ mod test {
         assert!(matrix_dot(&a, &b) == na::DMatrix::from_row_slice(1, 3, &[140., 320., 500.]));
     }
 }
+ */

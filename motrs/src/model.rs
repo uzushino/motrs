@@ -444,16 +444,15 @@ mod test {
             dim_size: 2,
             ..Default::default()
         };
-
+    
         let model = Model::new(0.1, Some(kwargs));
-        let _box = na::dmatrix![10., 10., 20., 30.];
-
+        let _box = nd::array![[10., 10.], [20., 30.]];
         let x = model.box_to_x(_box.clone());
-        assert!(na::dmatrix![15., 0., 20., 0., 10., 20.] == x);
-
+        assert!(nd::array![[15., 0.], [20., 0.], [10., 20.]] == x);
+    
         let box_ret = model.x_to_box(&x);
         assert!(box_ret == _box);
-
+    
         let kwargs = ModelKwargs {
             order_pos: 1,
             dim_pos: 3,
@@ -461,12 +460,14 @@ mod test {
             dim_size: 3,
             ..Default::default()
         };
+    
         let model = Model::new(0.1, Some(kwargs));
-        let _box = na::dmatrix![10., 10., 10., 20., 30., 40.];
+        let _box = nd::array![[10., 10., 10.], [20., 30., 40.]];
         let x = model.box_to_x(_box.clone());
-
-        assert!(na::dmatrix![15., 0., 20., 0., 25., 0., 10., 20., 30.] == x);
-
+        assert!(
+            x == nd::Array2::from_shape_vec((3, 3), vec![15., 0., 20., 0., 25., 0., 10., 20., 30.]).unwrap()
+        );
+    
         let box_ret = model.x_to_box(&x);
         assert!(box_ret == _box);
     }
@@ -480,25 +481,25 @@ mod test {
             dim_size: 2,
             ..Default::default()
         };
-
+    
         let model = Model::new(0.1, Some(kwargs));
-        let _box = na::dmatrix![10f32, 10., 20., 20.];
+        let _box = nd::array![[10f32, 10.], [20., 20.]];
         let result = model.box_to_z(_box);
-
-        assert!(result == na::dmatrix![15., 15., 10., 10.]);
-
-        let mut kwargs = ModelKwargs {
+    
+        assert!(result == nd::array![15., 15., 10., 10.]);
+    
+        let kwargs = ModelKwargs {
             order_pos: 1,
             dim_pos: 3,
             order_size: 1,
             dim_size: 2,
             ..Default::default()
         };
-
+    
         let model = Model::new(0.1, Some(kwargs));
-        let _box = na::dmatrix![10f32, 10., 0., 20., 20., 50.];
+        let _box = nd::array![[10f32, 10., 0.], [20., 20., 50.]];
         let result = model.box_to_z(_box);
-
-        assert!(result == na::dmatrix![15., 15., 25., 10., 10.]);
+    
+        assert!(result == nd::array![15., 15., 25., 10., 10.]);
     }
 }

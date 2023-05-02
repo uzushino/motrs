@@ -1,4 +1,3 @@
-use nalgebra as na;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
@@ -6,16 +5,9 @@ use std::iter::FromIterator;
 use std::sync::{Arc, Mutex};
 
 use crate::filter::KalmanFilter;
-use crate::matrix::*;
 use crate::metrics::*;
 use crate::model::{Model, ModelKwargs, ModelPreset};
 use std::vec;
-
-macro_rules! array {
-    ($r:expr, $c:expr, $i:expr) => {
-        na::DMatrix::from_row_slice($r, $c, $i)
-    };
-}
 
 #[derive(Debug, Clone)]
 pub struct Track {

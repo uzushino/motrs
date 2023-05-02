@@ -1,7 +1,6 @@
 // Refer: https://github.com/nwtnni/hungarian
 
 use fixedbitset::FixedBitSet;
-use nalgebra as na;
 use num_traits::NumAssign;
 use num_traits::{Bounded, Signed, Zero};
 use std::fmt::Debug;

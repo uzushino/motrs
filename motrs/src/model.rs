@@ -199,132 +199,126 @@ impl Model {
         (pos_idxs, size_idxs, offset_idx)
     }
 
-    pub fn build_F(&self) -> na::DMatrix<f32> {
+    pub fn build_F(&self) -> nd::Array2<f32> {
         let block_pos = base_dim_block(self.dt, self.order_pos);
         let block_size = base_dim_block(self.dt, self.order_size);
-
+        let dim_pos = self.dim_pos;
+        let dim_size = self.dim_size;
+    
         let diag_components = {
-            let _block_pos = repeat_vec(vec![block_pos], self.dim_pos);
-            let _block_size = repeat_vec(vec![block_size], self.dim_size);
+            let _block_pos = nd::Array::from(vec![block_pos]).repeat(dim_pos, 1);
+            let _block_size = nd::Array::from(vec![block_size]).repeat(dim_size, 1);
+    
             let mut diag_components = Vec::new();
-
-            diag_components.extend(_block_pos);
-            diag_components.extend(_block_size);
-
+            diag_components.extend(_block_pos.iter());
+            diag_components.extend(_block_size.iter());
             diag_components
         };
 
-        block_diag(diag_components)
+        block_diag(diag_components) 
     }
 
-    pub fn build_Q(&self) -> na::DMatrix<f32> {
+    pub fn build_Q(&self) -> nd::Array2<f32> {
         let var_pos = self.q_var_pos;
         let var_size = self.q_var_size as f32;
-
+    
         let q_pos = if self.order_pos == 0 {
-            na::dmatrix![var_pos]
+            nd::Array::from_elem((1, 1), var_pos)
         } else {
-            crate::Q_discrete_white_noise(self.order_pos + 1, self.dt, var_pos, 1, true)
+            crate::Q_discrete_white_noise(self.order_pos + 1, self.dt, var_pos, 1, true).into()
         };
-
+    
         let q_size = if self.order_size == 0 {
-            na::dmatrix![var_size]
+            nd::Array::from_elem((1, 1), var_size)
         } else {
-            crate::Q_discrete_white_noise(self.order_size + 1, self.dt, var_size, 1, true)
+            crate::Q_discrete_white_noise(self.order_size + 1, self.dt, var_size, 1, true).into()
         };
-
-        let diag_components = {
-            let block_pos = repeat_vec(vec![q_pos], self.dim_pos);
-            let block_size = repeat_vec(vec![q_size], self.dim_size);
-            block_pos.into_iter().chain(block_size).collect()
-        };
-
+    
+        let block_pos = q_pos.repeat(self.dim_pos, self.dim_pos);
+        let block_size = q_size.repeat(self.dim_size, self.dim_size);
+    
+        let diag_components = block_pos.outer_iter().chain(block_size.outer_iter())
+            .map(|a| a.to_owned()).collect();
+    
         block_diag(diag_components)
     }
 
-    pub fn build_H(&self) -> na::DMatrix<f32> {
-        fn _base_block(order: usize) -> na::DMatrix<f32> {
-            let a = vec![1.];
-            let b = repeat_vec(vec![0.], order);
-            na::DMatrix::from_vec(1, order + 1, a.into_iter().chain(b).collect::<Vec<_>>())
+    pub fn build_H(&self) -> nd::Array2<f32> {
+        fn base_block(order: usize) -> nd::Array2<f32> {
+            let a = nd::Array::from_elem((1, 1), 1.0);
+            let b = nd::Array::from_elem((1, order), 0.0);
+            nd::stack![1, [a, b]]
         }
-
-        let block_pos = repeat_vec(vec![_base_block(self.order_pos)], self.dim_pos);
-        let block_size = repeat_vec(vec![_base_block(self.order_size)], self.dim_size);
-        let diag_components = block_pos.into_iter().chain(block_size).collect();
+    
+        let block_pos = repeat_vec(vec![base_block(self.order_pos)], self.dim_pos);
+        let block_size = repeat_vec(vec![base_block(self.order_size)], self.dim_size);
+    
+        let diag_components = block_pos.iter().chain(block_size.iter())
+            .cloned().map(|a| a.to_owned()).collect();
 
         block_diag(diag_components)
     }
 
-    pub fn build_P(&self) -> na::DMatrix<f32> {
+    pub fn build_P(&self) -> nd::Array2<f32> {
         let n = eye(self.state_length);
         n * self.p_cov_p0
     }
 
-    pub fn build_R(&self) -> na::DMatrix<f32> {
+    pub fn build_R(&self) -> nd::Array2<f32> {
         let block_pos = eye(self.dim_pos) * self.r_var_pos;
         let block_size = eye(self.dim_size) * (self.r_var_size as f32);
 
         block_diag(vec![block_pos, block_size])
     }
 
-    pub fn box_to_z(&self, _box: na::DMatrix<f32>) -> na::DMatrix<f32> {
-        let rep = _box.iter().map(|v| *v).collect::<Vec<f32>>();
-        let _box = na::DMatrix::from_row_slice(2, self.dim_box / 2, rep.as_slice());
-        let a = _box.row_sum() / 2.0;
-        let center = a.columns(0, self.dim_pos);
-        let b = _box.index((1, ..)) - _box.index((0, ..));
-        let length = b.columns(0, self.dim_size);
-
+    pub fn box_to_z(&self, _box: nd::Array2<f32>) -> nd::Array2<f32> {
+        let rep = _box.iter().cloned().collect::<Vec<f32>>();
+        let _box = nd::Array2::from_shape_vec((2, self.dim_box / 2), rep).unwrap();
+        let a = _box.sum_axis(ndarray::Axis(0)) / 2.0;
+        let center = a.slice(nd::s![..self.dim_pos]).to_owned();
+        let b = _box.row(1) - _box.row(0);
+        let length = b.slice(nd::s![..self.dim_size]).to_owned();
+    
         let mut result = center.iter().copied().collect::<Vec<f32>>();
         result.append(&mut length.iter().copied().collect::<Vec<f32>>());
-
-        na::DMatrix::from_row_slice(1, result.len(), result.as_slice())
+    
+        nd::Array2::from_shape_vec((1, result.len()), result).unwrap()
     }
 
-    pub fn box_to_x(&self, _box: na::DMatrix<f32>) -> na::DMatrix<f32> {
-        let mut x: na::DMatrix<f32> = na::DMatrix::zeros(1, self.state_length);
+    pub fn box_to_x(&self, _box: nd::Array2<f32>) -> nd::Array2<f32> {
+        let mut x: nd::Array2<f32> = nd::Array::zeros((1, self.state_length));
         let z = self.box_to_z(_box);
         for (idx, i) in self.z_in_x_ids.iter().enumerate() {
-            x[*i] = z[idx];
+            x[[0, *i]] = z[[0, idx]];
         }
         x
     }
 
-    pub fn x_to_box(&self, x: &na::DMatrix<f32>) -> na::DMatrix<f32> {
-        let size = max(self.dim_pos, self.dim_size);
-
-        let mut xs = Vec::default();
-        for i in &self.pos_idxs {
-            xs.push(x[*i]);
-        }
+    pub fn x_to_box(&self, x: &nd::Array1<f32>) -> nd::Array2<f32> {
+        let size = self.dim_pos.max(self.dim_size);
+    
         let center = zero_pad(
-            na::DMatrix::from_row_slice(1, xs.len(), xs.as_slice()),
+            &x.slice(self.pos_idxs.clone()).to_owned(),
             size,
         );
-
-        let mut ys = Vec::default();
-        for i in &self.size_idxs {
-            ys.push(x[*i]);
-        }
+    
         let length = zero_pad(
-            na::DMatrix::from_row_slice(1, ys.len(), ys.as_slice()),
+            &x.slice(self.size_idxs.clone()).to_owned(),
             size,
         );
-
-        let mut result = (center.clone() - length.clone() / 2.)
-            .iter()
-            .map(|v| *v)
-            .collect::<Vec<f32>>();
-        result.append(
-            &mut (center + length / 2.)
-                .iter()
-                .map(|v| *v)
-                .collect::<Vec<f32>>(),
-        );
-
-        na::DMatrix::from_row_slice(1, result.len(), result.as_slice())
+    
+        let mut result = nd::concatenate(
+            nd::Axis(1),
+            &[&(center.clone() - length.clone() / 2.), &(center + length / 2.)],
+        )
+        .unwrap()
+        .into_iter()
+        .map(|v| *v)
+        .collect::<Vec<f32>>();
+    
+        nd::Array2::from_shape_vec((1, result.len()), result).unwrap()
     }
+
 }
 
 #[cfg(test)]
@@ -334,10 +328,10 @@ mod test {
 
     #[test]
     fn test_zero_pad() {
-        let arr = na::dmatrix![1., 2., 3.];
-        let pad_arr = zero_pad(arr, 5);
-
-        assert!(pad_arr == na::dmatrix![1., 2., 3., 0., 0.])
+        let arr = nd::Array::from_shape_vec((1, 3), vec![1., 2., 3.]).unwrap();
+        let pad_arr: nd::Array2<f32> = zero_pad(arr, 5);
+    
+        assert!(pad_arr == nd::Array::from_shape_vec((1, 5), vec![1., 2., 3., 0., 0.]).unwrap())
     }
 
     #[test]
@@ -348,13 +342,12 @@ mod test {
 
     #[test]
     fn test_block_diag() {
-        let a = na::DMatrix::from_row_slice(2, 2, &[1., 0., 0., 1.]);
-        let b = na::DMatrix::from_row_slice(2, 3, &[3., 4., 5., 6., 7., 8.]);
-        let c = na::DMatrix::from_row_slice(1, 1, &[7.]);
+        let a = nd::Array::from_shape_vec((2, 2), vec![1., 0., 0., 1.]).unwrap();
+        let b = nd::Array::from_shape_vec((2, 3), vec![3., 4., 5., 6., 7., 8.]).unwrap();
+        let c = nd::Array::from_shape_vec((1, 1), vec![7.]).unwrap();
 
-        let expect = na::DMatrix::from_row_slice(
-            5,
-            6,
+        let expect = nd::Array::from_shape_vec(
+            (5, 6),
             &[
                 1., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 3., 4., 5., 0., 0., 0., 6.,
                 7., 8., 0., 0., 0., 0., 0., 0., 7.,
@@ -370,7 +363,7 @@ mod test {
     fn test_eye() {
         let a = eye(3);
         let actual = a * 3.0;
-        let expect = na::DMatrix::from_row_slice(3, 3, &[3., 0., 0., 0., 3., 0., 0., 0., 3.]);
+        let expect = nd::Array::from_shape_vec((3, 3), &[3., 0., 0., 0., 3., 0., 0., 0., 3.]);
 
         assert!(actual == expect)
     }
@@ -389,39 +382,36 @@ mod test {
         assert!(m1.measurement_lengths == 4);
 
         let F1 = m1.build_F();
-        let F1_exp = na::DMatrix::from_row_slice(
-            6,
-            6,
+        let F1_exp = nd::Array::from_shape_vec(
+            (6, 6),
             &[
                 1., 0.1, 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 1., 0.1, 0., 0., 0., 0.,
                 0., 1., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 1.,
             ],
         );
 
-        assert!(F1_exp == F1);
+        assert!(F1_exp.unwrap() == F1);
 
         let H1 = m1.build_H();
-        let H1_exp = na::DMatrix::from_row_slice(
-            4,
-            6,
+        let H1_exp = nd::Array::from_shape_slice(
+            (4, 6),
             &[
                 1., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0.,
                 0., 0., 1.,
             ],
         );
-        assert!(H1_exp == H1);
+        assert!(H1_exp.unwrap() == H1);
 
         _ = m1.build_Q();
 
         let R1 = m1.build_R();
-        let R1_exp = na::DMatrix::from_row_slice(
-            4,
-            4,
+        let R1_exp = nd::Array::from_shape_vec(
+            (4, 4),
             &[
                 0.1, 0., 0., 0., 0., 0.1, 0., 0., 0., 0., 0.3, 0., 0., 0., 0., 0.3,
             ],
         );
-        assert!(R1 == R1_exp);
+        assert!(R1_exp.unwrap() == R1);
 
         _ = m1.build_P();
 
@@ -434,9 +424,8 @@ mod test {
         };
         let m2 = Model::new(0.1, Some(kwargs));
         let F2 = m2.build_F();
-        let F2_exp = na::DMatrix::from_row_slice(
-            5,
-            5,
+        let F2_exp = nd::Array::from_row_slice(
+            (5, 5),
             &[
                 1., 0.1, 0.005, 0., 0., 0., 1., 0.1, 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 1.,
                 0.1, 0., 0., 0., 0., 1.,

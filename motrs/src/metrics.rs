@@ -1,8 +1,5 @@
-use nalgebra as na;
-use nalgebra::base::dimension::Dynamic;
-
 use ordered_float::OrderedFloat;
-
+use ndarray as nd;
 use crate::assignment::minimize;
 use crate::matrix::*;
 

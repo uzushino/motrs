@@ -2,7 +2,7 @@ use std::ops::Mul;
 
 use ndarray as nd;
 
-// pub mod matrix;
+pub mod matrix;
 pub mod model;
 pub mod tracker;
 

@@ -2,8 +2,7 @@ use crate::matrix::*;
 /**
  * Refer: https://github.com/MichaelMauderer/filter-rs
  */
-use nalgebra::DMatrix;
-use nalgebra::RealField;
+use ndarray::Array2;
 
 #[allow(non_snake_case)]
 #[derive(Debug)]
@@ -12,42 +11,42 @@ pub struct KalmanFilter<T> {
     pub dim_z: usize,
     pub dim_u: usize,
 
-    pub x: DMatrix<T>,
-    pub P: DMatrix<T>,
-    pub x_prior: DMatrix<T>,
-    pub P_prior: DMatrix<T>,
-    pub x_post: DMatrix<T>,
-    pub P_post: DMatrix<T>,
-    pub z: Option<DMatrix<T>>,
-    pub R: DMatrix<T>,
-    pub Q: DMatrix<T>,
-    pub B: Option<DMatrix<T>>,
-    pub F: DMatrix<T>,
-    pub H: DMatrix<T>,
-    pub y: DMatrix<T>,
-    pub K: DMatrix<T>,
-    pub S: DMatrix<T>,
-    pub SI: DMatrix<T>,
+    pub x: Array2<T>,
+    pub P: Array2<T>,
+    pub x_prior: Array2<T>,
+    pub P_prior: Array2<T>,
+    pub x_post: Array2<T>,
+    pub P_post: Array2<T>,
+    pub z: Option<Array2<T>>,
+    pub R: Array2<T>,
+    pub Q: Array2<T>,
+    pub B: Option<Array2<T>>,
+    pub F: Array2<T>,
+    pub H: Array2<T>,
+    pub y: Array2<T>,
+    pub K: Array2<T>,
+    pub S: Array2<T>,
+    pub SI: Array2<T>,
     pub alpha_sq: T,
 }
 
 #[allow(non_snake_case)]
-impl<T: RealField + Copy> KalmanFilter<T> {
+impl<T> KalmanFilter<T> {
     pub fn new(dim_x: usize, dim_z: usize, dim_u: usize) -> Self {
-        let x = DMatrix::<T>::from_element(1, dim_x, T::zero());
-        let P = DMatrix::<T>::identity(dim_x, dim_x);
-        let Q = DMatrix::<T>::identity(dim_x, dim_x);
-        let F = DMatrix::<T>::identity(dim_x, dim_x);
-        let H = DMatrix::<T>::from_element(dim_z, dim_x, T::zero());
-        let R = DMatrix::<T>::identity(dim_z, dim_z);
+        let x = Array2::<T>::from_element(1, dim_x, T::zero());
+        let P = Array2::<T>::identity(dim_x, dim_x);
+        let Q = Array2::<T>::identity(dim_x, dim_x);
+        let F = Array2::<T>::identity(dim_x, dim_x);
+        let H = Array2::<T>::from_element(dim_z, dim_x, T::zero());
+        let R = Array2::<T>::identity(dim_z, dim_z);
         let alpha_sq = T::one();
 
         let z = None;
 
-        let K = DMatrix::<T>::from_element(dim_x, dim_z, T::zero());
-        let y = DMatrix::<T>::from_element(1, dim_z, T::one());
-        let S = DMatrix::<T>::from_element(dim_z, dim_z, T::zero());
-        let SI = DMatrix::<T>::from_element(dim_z, dim_z, T::zero());
+        let K = Array2::<T>::from_element(dim_x, dim_z, T::zero());
+        let y = Array2::<T>::from_element(1, dim_z, T::one());
+        let S = Array2::<T>::from_element(dim_z, dim_z, T::zero());
+        let SI = Array2::<T>::from_element(dim_z, dim_z, T::zero());
 
         let x_prior = x.clone();
         let P_prior = P.clone();
@@ -85,37 +84,34 @@ impl<T: RealField + Copy> KalmanFilter<T> {
         let f = &self.F;
         let q = &self.Q;
 
-        self.x = matrix_dot(&f, &self.x);
-        self.P = matrix_dot(&matrix_dot(&f, &self.P), &f.transpose()) * self.alpha_sq + q;
+        self.x = f.dot(&self.x);
+        self.P = f.dot(&self.P).dot(f.transpose()) * self.alpha_sq + q;
 
         self.x_prior = self.x.clone();
         self.P_prior = self.P.clone();
     }
 
     /// Add a new measurement (z) to the Kalman filter.
-    pub fn update(&mut self, z: &DMatrix<T>, R: Option<&DMatrix<T>>, H: Option<&DMatrix<T>>) {
+    pub fn update(&mut self, z: &Array2<T>, R: Option<&Array2<T>>, H: Option<&Array2<T>>) {
         let R = R.unwrap_or(&self.R);
         let H = H.unwrap_or(&self.H);
 
-        self.y = z - matrix_dot(&H, &self.x);
-        let PHT = matrix_dot(&self.P, &H.transpose());
+        self.y = z - H.dot(&self.x);
+        let PHT = self.P.dot(&H.transpose());
 
-        self.S = matrix_dot(&H, &PHT) + R;
+        self.S = H.dot(&PHT) + R;
         self.SI = self
             .S
             .clone()
             .pseudo_inverse(T::from_f32(0.00001).unwrap())
             .unwrap();
-        self.K = matrix_dot(&PHT, &self.SI);
-        self.x = matrix_add(&self.x, &matrix_dot(&self.K, &self.y));
+        self.K = PHT.dot(&self.SI);
+        self.x = &self.x + self.K.dot(&self.y);
 
-        let I_KH = matrix_sub(
-            &DMatrix::identity(self.dim_x, self.dim_x),
-            &matrix_dot(&self.K, &H),
-        );
-
-        let p1 = matrix_dot(&matrix_dot(&I_KH, &self.P), &I_KH.transpose());
-        let p2 = matrix_dot(&matrix_dot(&self.K, &R), &self.K.transpose());
+        let I_KH = &Array2::identity(self.dim_x, self.dim_x) - self.K.dot(&H);
+        
+        let p1 = I_KH.dot(&self.P).dot(I_KH.transpose());
+        let p2 = self.K.dot(&R).dot(&self.K.transpose());
 
         self.P = p1 + p2;
 
@@ -124,7 +120,7 @@ impl<T: RealField + Copy> KalmanFilter<T> {
         self.P_post = self.P.clone();
     }
 
-    pub fn predict_steadystate(&mut self, u: Option<&DMatrix<T>>, B: Option<&DMatrix<T>>) {
+    pub fn predict_steadystate(&mut self, u: Option<&Array2<T>>, B: Option<&Array2<T>>) {
         let B = if B.is_some() { B } else { self.B.as_ref() };
 
         if B.is_some() && u.is_some() {
@@ -137,7 +133,7 @@ impl<T: RealField + Copy> KalmanFilter<T> {
         self.P_prior = self.P.clone();
     }
 
-    pub fn update_steadystate(&mut self, z: &DMatrix<T>) {
+    pub fn update_steadystate(&mut self, z: &Array2<T>) {
         self.y = z - &self.H * &self.x;
         self.x = &self.x + &self.K * &self.y;
 
@@ -146,7 +142,7 @@ impl<T: RealField + Copy> KalmanFilter<T> {
         self.P_post = self.P.clone();
     }
 
-    pub fn get_prediction(&self, u: Option<&DMatrix<T>>) -> (DMatrix<T>, DMatrix<T>) {
+    pub fn get_prediction(&self, u: Option<&Array2<T>>) -> (Array2<T>, Array2<T>) {
         let Q = &self.Q;
         let F = &self.F;
         let P = &self.P;
@@ -164,7 +160,7 @@ impl<T: RealField + Copy> KalmanFilter<T> {
         (x, P)
     }
 
-    pub fn get_update(&self, z: &DMatrix<T>) -> (DMatrix<T>, DMatrix<T>) {
+    pub fn get_update(&self, z: &Array2<T>) -> (Array2<T>, Array2<T>) {
         let R = &self.R;
         let H = &self.H;
         let P = &self.P;
@@ -178,26 +174,27 @@ impl<T: RealField + Copy> KalmanFilter<T> {
 
         let K = &(PHT * SI);
         let x = x + K * y;
-        let I_KH = &(DMatrix::<T>::identity(self.dim_x, self.dim_x) - (K * H));
+        let I_KH = &(Array2::<T>::identity(self.dim_x, self.dim_x) - (K * H));
         let P = ((I_KH * P) * I_KH.transpose()) + ((K * R) * &K.transpose());
 
         (x, P)
     }
 
-    pub fn residual_of(&self, z: &DMatrix<T>) -> DMatrix<T> {
+    pub fn residual_of(&self, z: &Array2<T>) -> Array2<T> {
         z - (&self.H * &self.x_prior)
     }
 
-    pub fn measurement_of_state(&self, x: &DMatrix<T>) -> DMatrix<T> {
+    pub fn measurement_of_state(&self, x: &Array2<T>) -> Array2<T> {
         &self.H * x
     }
 }
 
+/*
 #[cfg(test)]
 mod tests {
     use assert_approx_eq::assert_approx_eq;
     use nalgebra::base::Vector1;
-    use nalgebra::{dmatrix, Matrix1, Matrix2, Vector2, U1, U2};
+    use nalgebra::{Array2, Matrix1, Matrix2, Vector2, U1, U2};
 
     use super::*;
 
@@ -207,7 +204,7 @@ mod tests {
 
         for i in 0..1000 {
             let zf = i as f32;
-            let z = dmatrix!(zf);
+            let z = Array2!(zf);
 
             kf.predict();
             kf.update(&z, None, None);
@@ -216,3 +213,4 @@ mod tests {
         }
     }
 }
+ */

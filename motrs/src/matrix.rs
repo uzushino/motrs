@@ -14,7 +14,7 @@ pub fn matrix_to_vec<T: Copy>(mat: &nd::Array2<T>) -> Vec<T> {
     result
 }
 
-pub fn matrix_split<T>(mat: &nd::Array2<T>, indices_num: usize) -> Vec<nd::Array2<T>> {
+pub fn matrix_split<T: Clone>(mat: &nd::Array2<T>, indices_num: usize) -> Vec<nd::Array2<T>> {
     let c = mat.ncols() / indices_num;
     let r = mat.nrows() / c;
 
@@ -37,120 +37,6 @@ where
         nd::Array::from_shape_fn((rows, cols), |(r, _c)| a[[r, 0]])
     } else {
         nd::Array::from_shape_fn((rows, cols), |(_r, c)| a[[0, c]])
-    }
-}
-
-pub fn matrix_broadcasting<F, T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>, f: F) -> na::DMatrix<T>
-where
-    F: Fn(usize, usize, &na::DMatrix<T>, &na::DMatrix<T>) -> T,
-    T: RealField + Copy,
-{
-    if a.ncols() == b.ncols() && a.nrows() == b.nrows() {
-        na::DMatrix::from_fn(a.nrows(), a.ncols(), |r, c| f(r, c, a, b))
-    } else {
-        let a = if a.nrows() == 1 && a.ncols() == 1 {
-            na::DMatrix::repeat(b.nrows(), b.ncols(), a[(0, 0)])
-        } else if a.nrows() == 1 {
-            create_matrix_broadcasting(b.nrows(), a.ncols(), a)
-        } else if a.ncols() == 1 {
-            create_matrix_broadcasting(a.nrows(), b.ncols(), a)
-        } else {
-            a.clone()
-        };
-
-        let b = if b.nrows() == 1 && b.ncols() == 1 {
-            na::DMatrix::repeat(a.nrows(), a.ncols(), b[(0, 0)])
-        } else if b.nrows() == 1 {
-            create_matrix_broadcasting(a.nrows(), b.ncols(), b)
-        } else if b.ncols() == 1 {
-            create_matrix_broadcasting(b.nrows(), a.ncols(), b)
-        } else {
-            b.clone()
-        };
-
-        if !(a.nrows() == b.nrows() && a.ncols() == b.ncols()) {
-            panic!(
-                "Can not broadcasting . a: {:?}, b: {:?}",
-                a.shape(),
-                b.shape()
-            );
-        }
-
-        matrix_broadcasting(&a, &b, f)
-    }
-}
-
-pub fn matrix_maximum<T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T>
-where
-    T: RealField + Copy,
-{
-    matrix_broadcasting(a, b, |r, c, a, b| b[(r, c)].max(a[(r, c)]))
-}
-
-pub fn matrix_minimum<T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T>
-where
-    T: RealField + Copy,
-{
-    matrix_broadcasting(a, b, |r, c, a, b| b[(r, c)].min(a[(r, c)]))
-}
-
-pub fn matrix_add<T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T>
-where
-    T: RealField + Copy,
-{
-    matrix_broadcasting(a, b, |r, c, a, b| a[(r, c)] + b[(r, c)])
-}
-
-pub fn matrix_sub<T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T>
-where
-    T: RealField + Copy,
-{
-    matrix_broadcasting(a, b, |r, c, a, b| a[(r, c)] - b[(r, c)])
-}
-
-pub fn matrix_mul<T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T>
-where
-    T: RealField + Copy,
-{
-    matrix_broadcasting(a, b, |r, c, a, b| a[(r, c)] * b[(r, c)])
-}
-
-pub fn matrix_div<T>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T>
-where
-    T: RealField + Copy,
-{
-    matrix_broadcasting(a, b, |r, c, a, b| a[(r, c)] / b[(r, c)])
-}
-
-pub fn matrix_dot<T: RealField + Copy>(a: &na::DMatrix<T>, b: &na::DMatrix<T>) -> na::DMatrix<T> {
-    if b.nrows() == 1 {
-        let mut mat: na::DMatrix<T> = na::DMatrix::repeat(1, a.nrows(), T::zero());
-        for r in 0..a.nrows() {
-            let mut total = T::zero();
-
-            for c in 0..b.ncols() {
-                total += a[(r, c)] * b[(0, c)];
-            }
-            mat[(0, r)] = total;
-        }
-
-        mat
-    } else if b.ncols() == 1 {
-        let b = create_matrix_broadcasting(b.nrows(), a.ncols(), &b);
-        let dot = matrix_dot(a, &b);
-        na::DMatrix::from_fn(a.nrows(), 1, |r, c| dot[(r, 0)])
-    } else {
-        let mat = na::DMatrix::from_fn(a.nrows(), b.ncols(), |r, c| {
-            let col = a.row(r);
-            let row = b.column(c);
-
-            let col = na::DMatrix::from_fn(col.nrows(), col.ncols(), |r, c| col[(r, c)]);
-            let row = na::DMatrix::from_fn(row.nrows(), row.ncols(), |r, c| row[(r, c)]);
-
-            (col * row).sum()
-        });
-
-        mat
     }
 }
 

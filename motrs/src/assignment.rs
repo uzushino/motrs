@@ -5,6 +5,7 @@ use num_traits::NumAssign;
 use num_traits::{Bounded, Signed, Zero};
 use std::fmt::Debug;
 use std::iter::Sum;
+use ndarray::Array2;
 
 macro_rules! on {
     ($s:expr, $i:expr) => {
@@ -32,7 +33,7 @@ pub fn minimize<N: 'static + NumAssign + Bounded + Sum<N> + Zero + Signed + Ord 
     } else {
         (width, height)
     };
-    let mut m = na::DMatrix::zeros(h, w);
+    let mut m = Array2::zeros((h, w));
 
     for i in 0..height {
         for j in 0..width {
@@ -45,8 +46,8 @@ pub fn minimize<N: 'static + NumAssign + Bounded + Sum<N> + Zero + Signed + Ord 
         }
     }
 
-    let mut stars = na::DMatrix::repeat(h, w, false);
-    let mut primes = na::DMatrix::repeat(h, w, false);
+    let mut stars = Array2::repeat(h, w, false);
+    let mut primes = Array2::repeat(h, w, false);
     let mut row_cover = FixedBitSet::with_capacity(h);
     let mut col_cover = FixedBitSet::with_capacity(w);
 

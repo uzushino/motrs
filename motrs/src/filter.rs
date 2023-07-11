@@ -30,23 +30,27 @@ pub struct KalmanFilter<T> {
     pub alpha_sq: T,
 }
 
+use ndarray::{ScalarOperand};
+use num_traits::Float;
+use std::ops::{AddAssign, MulAssign};
+
 #[allow(non_snake_case)]
-impl<T> KalmanFilter<T> {
+impl<T: Float + MulAssign + AddAssign + ScalarOperand> KalmanFilter<T> {
     pub fn new(dim_x: usize, dim_z: usize, dim_u: usize) -> Self {
-        let x = Array2::<T>::from_element(1, dim_x, T::zero());
-        let P = Array2::<T>::identity(dim_x, dim_x);
-        let Q = Array2::<T>::identity(dim_x, dim_x);
-        let F = Array2::<T>::identity(dim_x, dim_x);
-        let H = Array2::<T>::from_element(dim_z, dim_x, T::zero());
-        let R = Array2::<T>::identity(dim_z, dim_z);
+        let x = Array2::<T>::from_elem((1, dim_x), T::zero());
+        let P = Array2::<T>::eye(dim_x);
+        let Q = Array2::<T>::eye(dim_x);
+        let F = Array2::<T>::eye(dim_x);
+        let H = Array2::<T>::from_elem((dim_z, dim_x), T::zero());
+        let R = Array2::<T>::eye(dim_z);
         let alpha_sq = T::one();
 
         let z = None;
 
-        let K = Array2::<T>::from_element(dim_x, dim_z, T::zero());
-        let y = Array2::<T>::from_element(1, dim_z, T::one());
-        let S = Array2::<T>::from_element(dim_z, dim_z, T::zero());
-        let SI = Array2::<T>::from_element(dim_z, dim_z, T::zero());
+        let K = Array2::<T>::from_elem((dim_x, dim_z), T::zero());
+        let y = Array2::<T>::from_elem((1, dim_z), T::one());
+        let S = Array2::<T>::from_elem((dim_z, dim_z), T::zero());
+        let SI = Array2::<T>::from_elem((dim_z, dim_z), T::zero());
 
         let x_prior = x.clone();
         let P_prior = P.clone();
@@ -85,7 +89,7 @@ impl<T> KalmanFilter<T> {
         let q = &self.Q;
 
         self.x = f.dot(&self.x);
-        self.P = f.dot(&self.P).dot(f.transpose()) * self.alpha_sq + q;
+        self.P = f.dot(&self.P).dot(&f.t()) * self.alpha_sq + q;
 
         self.x_prior = self.x.clone();
         self.P_prior = self.P.clone();
@@ -97,7 +101,7 @@ impl<T> KalmanFilter<T> {
         let H = H.unwrap_or(&self.H);
 
         self.y = z - H.dot(&self.x);
-        let PHT = self.P.dot(&H.transpose());
+        let PHT = self.P.dot(&H.t());
 
         self.S = H.dot(&PHT) + R;
         self.SI = self
@@ -108,10 +112,10 @@ impl<T> KalmanFilter<T> {
         self.K = PHT.dot(&self.SI);
         self.x = &self.x + self.K.dot(&self.y);
 
-        let I_KH = &Array2::identity(self.dim_x, self.dim_x) - self.K.dot(&H);
+        let I_KH = &Array2::eye(self.dim_x) - self.K.dot(H);
         
-        let p1 = I_KH.dot(&self.P).dot(I_KH.transpose());
-        let p2 = self.K.dot(&R).dot(&self.K.transpose());
+        let p1 = I_KH.dot(&self.P).dot(&I_KH.t());
+        let p2 = self.K.dot(R).dot(&self.K.t());
 
         self.P = p1 + p2;
 
@@ -146,7 +150,7 @@ impl<T> KalmanFilter<T> {
         let Q = &self.Q;
         let F = &self.F;
         let P = &self.P;
-        let FT = F.transpose();
+        let FT = F.t();
 
         let B = self.B.as_ref();
         let x = {
@@ -167,14 +171,14 @@ impl<T> KalmanFilter<T> {
         let x = &self.x;
 
         let y = z - H * &self.x;
-        let PHT = &(P * H.transpose());
+        let PHT = &(P * &H.t());
 
         let S = H * PHT + R;
         let SI = S.try_inverse().unwrap();
 
         let K = &(PHT * SI);
         let x = x + K * y;
-        let I_KH = &(Array2::<T>::identity(self.dim_x, self.dim_x) - (K * H));
+        let I_KH = &(Array2::<T>::eye(self.dim_x) - (K * H));
         let P = ((I_KH * P) * I_KH.transpose()) + ((K * R) * &K.transpose());
 
         (x, P)

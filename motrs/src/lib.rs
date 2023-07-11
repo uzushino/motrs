@@ -1,7 +1,8 @@
 use std::ops::Mul;
-
+use num_traits::{ FromPrimitive, Zero };
 use ndarray as nd;
-
+use ndarray::prelude::*;
+use ndarray::DataOwned;
 pub mod matrix;
 pub mod model;
 pub mod tracker;
@@ -12,7 +13,7 @@ mod metrics;
 
 use crate::tracker::Track;
 
-pub fn Q_discrete_white_noise<T>(
+pub fn Q_discrete_white_noise<T: FromPrimitive + Zero + std::ops::Mul + Clone + nd::ScalarOperand>(
     dim: usize,
     dt: f32,
     var: f32,
@@ -55,7 +56,7 @@ pub fn Q_discrete_white_noise<T>(
         ],
     };
 
-    order_by_derivative(Q, dim, block_size).map(|v| T::from_f32(v).unwrap_or(T::zero()))
+    order_by_derivative(Q, dim, block_size).map(|&v| T::from_f32(v).unwrap_or(T::zero()))
         * T::from_f32(var).unwrap_or(T::zero())
 }
 
@@ -63,12 +64,13 @@ fn order_by_derivative<T>(
     q: Vec<Vec<T>>,
     dim: usize,
     block_size: usize,
-) -> nd::Array2<T> {
+) -> nd::Array2<T> where T: DataOwned + Clone + Zero,
+{
     let n = dim * block_size;
-    let mut d = nd::Array2::<T>::zeros(n);
+    let mut d = nd::Array2::<T>::zeros((n, n));
 
     for (i, &x) in q.iter().flatten().enumerate() {
-        let f = nd::Array2(block_size, block_size) * x;
+        let f = nd::Array2::<T>::eye(block_size) * x;
         let ix = (i / dim) * block_size;
         let iy = (i % dim) * block_size;
 

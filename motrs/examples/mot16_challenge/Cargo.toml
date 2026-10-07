@@ -1,23 +1,14 @@
 [package]
 name = "mot16_challenge"
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
 publish = false
 version = "0.1.0"
 
 [dependencies]
-motrs = { path = "../motrs" }
-
-iced = { version = "0.4.2", features = ["canvas", "image"] }
-iced_native = "0.5.1"
-
-nalgebra = "0.31.0"
-genawaiter = "0.99.1"
-rand = "*"
-rand_distr = "*"
-csv = "*"
-
-polars = { version = "*", features = ["lazy", "csv-file"] }
-polars-core = { version = "*", features = ["rows", "private"] }
-imageproc = "*"
-image = { version = "0.24.1", default-features = false, features = ["jpeg"] }
-rusttype = "*"
+motrs = { path = "../.." }
+iced.workspace = true
+csv.workspace = true
+imageproc.workspace = true
+image.workspace = true
+ab_glyph.workspace = true

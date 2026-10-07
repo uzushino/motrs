@@ -1,25 +1,16 @@
 [package]
 name = "motrs"
 version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
-nalgebra = "0.31.1"
-uuid = { version = "1.1.2", features = ["serde", "v4"] }
-approx = "0.5.1"
-ordered-float = "2.0"
-rand = "0.8.5"
-fixedbitset = "0.3"
-num-traits = "0.2"
+faer.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
-assert_approx_eq = "1.1.0"
-genawaiter = "0.99.1"
-csv = "1.1.6"
-rand_distr = "0.4.3"
-criterion = "0.3"
+approx.workspace = true
+criterion.workspace = true
 
 [[bench]]
 name = "main"

@@ -1,223 +1,97 @@
-use genawaiter::{sync::gen, yield_};
-use motrs::tracker::Detection;
-use nalgebra as na;
-use polars::{frame, prelude::*};
-use std::env;
-use std::path::PathBuf;
+use std::collections::BTreeMap;
+use std::io::Read;
+use std::path::{Path, PathBuf};
 
-use rand::distributions::Uniform;
-use rand::rngs::StdRng;
-use rand::Rng;
-use rand_distr::{Distribution, Normal};
+use motrs::{BoundingBox, Detection};
 
-use iced::{canvas, canvas::Path, Color, Point, Size};
+type ReadResult<T> = Result<T, Box<dyn std::error::Error>>;
 
-const CANVAS_SIZE: i64 = 1000;
-
-pub fn rand_int<R: Rng>(rng: &mut R, min_val: i64, max_val: i64) -> i64 {
-    rng.sample(Uniform::new(min_val, max_val))
+#[derive(Clone)]
+pub struct FrameDetections {
+    pub number: u64,
+    pub detections: Vec<Detection>,
 }
 
-pub fn rand_uniform<R: Rng>(rng: &mut R, min_val: f32, max_val: f32) -> f32 {
-    rng.sample::<f32, _>(Uniform::new(min_val, max_val))
+pub fn video_frame_path(directory: &Path, number: u64) -> PathBuf {
+    directory.join(format!("{number:06}.jpg"))
 }
 
-pub fn random<R: Rng>(rng: &mut R) -> f32 {
-    rng.gen()
+pub fn read_detections(path: &Path) -> ReadResult<Vec<FrameDetections>> {
+    parse_detections(std::fs::File::open(path)?)
 }
 
-pub fn rand_color<R: Rng>(rng: &mut R) -> [i64; 3] {
-    let r = rand_int(rng, 0, 255);
-    let g = rand_int(rng, 0, 255);
-    let b = rand_int(rng, 0, 255);
-
-    [r, g, b]
-}
-
-pub fn rand_guass<R: Rng>(rng: &mut R, mu: f32, sigma2: f32) -> f32 {
-    let normal = Normal::new(mu, sigma2.sqrt()).unwrap();
-    normal.sample(rng)
-}
-
-pub fn read_video_frame(dir: &std::path::Path, frame_idx: u64) -> PathBuf {
-    let frame = format!("{0:>06}.jpg", frame_idx);
-    let fpath = dir.join(frame);
-    fpath
-}
-
-fn read_bounds_csv(path: &std::path::Path) -> DataFrame {
-    let mut df = LazyCsvReader::new(path.to_string_lossy().to_string())
-        .with_ignore_parser_errors(true)
-        .has_header(false)
-        .finish()
-        .unwrap()
-        .collect()
-        .unwrap();
-
-    let _ = df.set_column_names(&[
-        "frame_idx",
-        "id",
-        "bb_left",
-        "bb_top",
-        "bb_width",
-        "bb_height",
-        // "conf",
-        "x",
-        "y",
-        "z",
-    ]);
-
-    df
-}
-
-fn read_max_frame(df: &DataFrame) -> i64 {
-    let max_frame = df.clone().lazy().collect().unwrap().max();
-
-    let frame_idx = max_frame.find_idx_by_name("frame_idx").unwrap();
-    let max_frame = max_frame.get(frame_idx).unwrap();
-
-    match max_frame[0] {
-        AnyValue::Int64(v) => v,
-        _ => 0,
-    }
-}
-
-fn read_bounds(
-    df: &DataFrame,
-    frame_idx: i64,
-    drop_detection_prob: f32,
-    add_detection_noise: f32,
-) -> Vec<Detection> {
-    let seed: [u8; 32] = [13; 32];
-    let mut rng: StdRng = rand::SeedableRng::from_seed(seed);
-
-    let bb_left = df.find_idx_by_name("bb_left").unwrap();
-    let bb_top = df.find_idx_by_name("bb_top").unwrap();
-    let bb_width = df.find_idx_by_name("bb_width").unwrap();
-    let bb_height = df.find_idx_by_name("bb_height").unwrap();
-
-    let s: Series = Series::new("frame_idx", &[frame_idx]);
-    let mask = df.column("frame_idx").unwrap().equal(&s).unwrap();
-    let filter_df = df.filter(&mask).unwrap();
-    let mut detections = vec![];
-
-    for row_idx in 0..filter_df.height() {
-        if random(&mut rng) < drop_detection_prob {
-            continue;
+fn parse_detections(reader: impl Read) -> ReadResult<Vec<FrameDetections>> {
+    let mut csv = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .flexible(true)
+        .trim(csv::Trim::All)
+        .from_reader(reader);
+    let mut frames = BTreeMap::<u64, Vec<Detection>>::new();
+    for record in csv.records() {
+        let record = record?;
+        if record.len() < 6 {
+            return Err("MOT16 rows must contain at least six columns".into());
         }
-
-        if let Some(row) = filter_df.get(row_idx) {
-            let mut _box = vec![
-                to_num(&row[bb_left]),
-                to_num(&row[bb_top]),
-                to_num(&row[bb_left]) + to_num(&row[bb_width]),
-                to_num(&row[bb_top]) + to_num(&row[bb_height]),
-            ];
-
-            if add_detection_noise > 0. {
-                for i in 0..4 {
-                    _box[i] += rand_uniform(&mut rng, -add_detection_noise, add_detection_noise);
-                }
-            }
-
-            let det = Detection {
-                _box: Some(na::DMatrix::from_row_slice(1, 4, _box.as_slice())),
-                score: rand_uniform(&mut rng, 0.5, 1.),
-                class_id: std::cmp::max(0, rand_int(&mut rng, -1, 1)),
-                feature: None,
-            };
-
-            detections.push(det);
+        let number: u64 = record[0].parse()?;
+        if number == 0 {
+            return Err("MOT16 frame numbers must start at one".into());
         }
+        let left: f32 = record[2].parse()?;
+        let top: f32 = record[3].parse()?;
+        let width: f32 = record[4].parse()?;
+        let height: f32 = record[5].parse()?;
+        let bounds = BoundingBox::new([left, top], [left + width, top + height])?;
+        // This visualization uses annotated boxes as observations, not detector
+        // confidence or ground-truth IDs. It does not measure tracking accuracy.
+        frames
+            .entry(number)
+            .or_default()
+            .push(Detection::new(bounds));
     }
-
-    detections
+    let last_frame = frames.last_key_value().map_or(0, |(&number, _)| number);
+    Ok((1..=last_frame)
+        .map(|number| FrameDetections {
+            number,
+            detections: frames.remove(&number).unwrap_or_default(),
+        })
+        .collect())
 }
 
-fn to_num(v: &AnyValue) -> f32 {
-    match v {
-        AnyValue::Int16(v) => v.clone() as f32,
-        AnyValue::Int32(v) => v.clone() as f32,
-        AnyValue::Int64(v) => v.clone() as f32,
-        _ => 0.,
-    }
-}
-
-pub fn read_detections(
-    path: &std::path::Path,
-    drop_detection_prob: f32,
-    add_detection_noise: f32,
-) -> impl Iterator<Item = (i64, Vec<Detection>)> {
-    let path = env::current_dir().unwrap().join(path);
-    if !path.is_file() {
-        panic!()
-    }
-
-    let df = read_bounds_csv(&path);
-    gen!({
-        let max_frame = read_max_frame(&df);
-
-        for frame_idx in 0..max_frame {
-            let mut detections =
-                read_bounds(&df, frame_idx, drop_detection_prob, add_detection_noise);
-            yield_!((frame_idx, detections));
-        }
-    })
-    .into_iter()
-}
-
-pub fn draw_rectangle(
-    frame: &mut canvas::Frame,
-    _box: (usize, usize, usize, usize),
-    color: (u8, u8, u8),
-    fill: bool,
-) {
-    let top_left = Point {
-        x: _box.0 as f32,
-        y: _box.1 as f32,
-    };
-
-    let size = Size {
-        width: (_box.3 as f32 - _box.1 as f32).abs(),
-        height: (_box.3 as f32 - _box.1 as f32).abs(),
-    };
-
-    let color = Color {
-        r: (color.0 / 255u8) as f32,
-        g: (color.1 / 255u8) as f32,
-        b: (color.2 / 255u8) as f32,
-        a: 0.5,
-    };
-
-    frame.with_save(|frame| {
-        let path = Path::rectangle(top_left, size);
-
-        if fill {
-            frame.fill(
-                &path,
-                canvas::Fill {
-                    color,
-                    ..Default::default()
-                },
-            );
-        }
-
-        frame.stroke(&path, canvas::Stroke::default().with_color(color));
-    })
-}
-
-mod test {
+#[cfg(test)]
+mod tests {
     use super::*;
 
     #[test]
-    fn test_read_video_frame() {
-        let path = read_video_frame(std::path::Path::new("/tmp"), 1);
-        assert_eq!(path.as_os_str(), "/tmp/00000001.jpg");
+    fn video_frame_uses_six_digits() {
+        assert_eq!(
+            video_frame_path(Path::new("/tmp"), 1),
+            Path::new("/tmp/000001.jpg")
+        );
     }
 
     #[test]
-    fn test_read_bounds_csv() {
-        let df = read_bounds_csv(std::path::Path::new("MOT16/train/MOT16-02/gt/gt.txt"));
-        println!("{}", df);
+    fn reads_fractional_bounds_and_preserves_empty_frames() {
+        let csv = b"3,2,10.5,20.25,30.5,40.75,1,-1,-1,-1\n1,1,1,2,3,4,1,1,1\n";
+        let frames = parse_detections(&csv[..]).unwrap();
+        assert_eq!(
+            frames.iter().map(|frame| frame.number).collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
+        assert!(frames[1].detections.is_empty());
+        assert_eq!(frames[2].detections[0].bounds.min(), &[10.5, 20.25]);
+        assert_eq!(frames[2].detections[0].bounds.max(), &[41.0, 61.0]);
+    }
+
+    #[test]
+    fn rejects_malformed_or_invalid_rows() {
+        for csv in [
+            "1,2,3\n",
+            "1,2,no,4,5,6\n",
+            "0,2,3,4,5,6\n",
+            "1,2,3,4,-5,6\n",
+            "1,2,NaN,4,5,6\n",
+        ] {
+            assert!(parse_detections(csv.as_bytes()).is_err());
+        }
     }
 }

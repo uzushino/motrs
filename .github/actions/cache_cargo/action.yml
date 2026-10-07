@@ -1,17 +1,14 @@
 name: cache_cargo
-description: caching .cargo directory
+description: Cache Cargo dependencies and workspace build output
 runs:
   using: composite
-
   steps:
-    - name: Cache cargo registry
-      uses: actions/cache@v2
+    - uses: actions/cache@v6
       with:
         path: |
-          ~/.cargo/bin/
           ~/.cargo/registry/index/
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
-          server/target/
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('rust-toolchain.toml', '**/Cargo.toml', 'Cargo.lock') }}
         restore-keys: ${{ runner.os }}-cargo-

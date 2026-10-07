@@ -1,9 +1,32 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
     "motrs",
-    "motrs_wasm"
+    "motrs_wasm",
+    "motrs/examples/mot16_challenge",
+    "motrs/examples/multi_object_2d_tracking",
 ]
+
+default-members = ["motrs", "motrs_wasm"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.99"
+
+[workspace.dependencies]
+faer = { version = "0.24.4", default-features = false, features = ["std", "linalg"] }
+uuid = { version = "1.27.0", features = ["v4"] }
+approx = "0.5.1"
+rand = "0.10.3"
+csv = "1.4.0"
+criterion = "0.8.2"
+wasm-bindgen = "0.2.129"
+serde = { version = "1.0.229", features = ["derive"] }
+gloo-utils = { version = "0.3.0", features = ["serde"] }
+iced = { version = "0.14.0", features = ["canvas", "image", "tokio"] }
+imageproc = { version = "0.27.0", default-features = false, features = ["text"] }
+image = { version = "0.25.10", default-features = false, features = ["jpeg"] }
+ab_glyph = "0.2.32"
 
 [profile.release]
 lto = "fat"

@@ -1,92 +1,33 @@
-on: push
-
 name: CI
 
-jobs:
-  build_cache:
-    runs-on: ubuntu-latest
-    env:
-      RUSTC_FORCE_INCREMENTAL: 1
-    steps:
-      - uses: actions/checkout@v2
-      - uses: ./.github/actions/cache_cargo
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
+on:
+  push:
+  pull_request:
 
+permissions:
+  contents: read
+
+jobs:
   check:
     runs-on: ubuntu-latest
-    needs: build_cache
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: ./.github/actions/cache_cargo
-      - uses: actions-rs/cargo@v1
-        with:
-          command: check
-
-  fmt:
-    runs-on: ubuntu-latest
-    needs: build_cache
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - run: rustup component add rustfmt
-      - uses: ./.github/actions/cache_cargo
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
-
-  clippy:
-    runs-on: ubuntu-latest
     env:
-      RUSTC_FORCE_INCREMENTAL: 1
-    needs: build_cache
+      CARGO_TERM_COLOR: always
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+      - uses: actions/checkout@v7
+      - name: Install the pinned Rust toolchain
+        run: rustup show
       - uses: ./.github/actions/cache_cargo
-      - uses: actions-rs/cargo@v1
-        continue-on-error: true
-        with:
-          command: clippy
-          args: -- -D warnings
-      - name: always true
-        run: |
-          exit 0
-
-  test:
-    runs-on: ubuntu-latest
-    env:
-      RUSTC_FORCE_INCREMENTAL: 1
-    needs: build_cache
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: ./.github/actions/cache_cargo
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: -- --nocapture
+      - name: Install GUI build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Check all targets
+        run: cargo check --locked --workspace --all-targets
+      - name: Clippy
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --locked --workspace --all-targets
+      - name: Test documentation
+        run: cargo test --locked --workspace --doc
+      - name: Build WebAssembly
+        run: cargo build --locked -p motrs_wasm --target wasm32-unknown-unknown

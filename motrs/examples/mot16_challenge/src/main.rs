@@ -1,352 +1,212 @@
-use std::env;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use motrs::model::*;
-use motrs::tracker::*;
-
-use iced::{
-    canvas, executor, Application, Column, Command, Container, Element, Image, Length, Rectangle,
-    Settings, Subscription,
-};
-
-use iced_native::image::Handle;
-use iced_native::subscription;
-use image::GenericImageView;
-use image::Rgba;
-use std::hash::Hash;
-
-use imageproc::drawing::draw_hollow_rect_mut;
-use imageproc::drawing::draw_text_mut;
+use ab_glyph::FontArc;
+use iced::widget::{Image, column, container, image::Handle, text};
+use iced::{Element, Length, Subscription};
+use image::{Rgba, RgbaImage};
+use imageproc::drawing::{draw_hollow_rect_mut, draw_text_mut};
 use imageproc::rect::Rect;
-
-use rusttype::{Font, Scale};
+use motrs::{BoundingBox, ModelConfig, MotionModel, MultiObjectTracker, TrackerConfig};
 
 mod util;
+use util::{FrameDetections, read_detections, video_frame_path};
 
-use crate::util::{draw_rectangle, read_detections, read_video_frame};
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let example_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut arguments = std::env::args_os().skip(1);
+    let first_argument = arguments.next();
+    let check_only = first_argument.as_deref() == Some(std::ffi::OsStr::new("--check"));
+    let dataset_argument = if check_only {
+        arguments.next()
+    } else {
+        first_argument
+    };
+    if arguments.next().is_some() {
+        return Err("Usage: mot16_challenge [--check] [sequence-directory]".into());
+    }
+    let dataset = dataset_argument
+        .map(PathBuf::from)
+        .unwrap_or_else(|| example_root.join("MOT16/train/MOT16-04"));
+    let annotation_path = dataset.join("gt/gt.txt");
+    let frames = read_detections(&annotation_path)
+        .map_err(|error| format!("Cannot read {}: {error}", annotation_path.display()))?;
+    let font = load_font(example_root);
+    if check_only {
+        return check_sequence(frames, dataset.join("img1"), font);
+    }
+    iced::application(
+        move || Viewer::new(frames.clone(), dataset.join("img1"), font.clone()),
+        Viewer::update,
+        Viewer::view,
+    )
+    .title("MOT16 tracking")
+    .subscription(Viewer::subscription)
+    .run()?;
+    Ok(())
+}
 
-pub fn main() -> iced::Result {
-    Mot16Challenge::run(Settings {
-        antialiasing: true,
-        ..Settings::default()
+fn load_font(example_root: &Path) -> Option<FontArc> {
+    let bundled = example_root.join("assets/fonts/Dela_Gothic_One/DelaGothicOne-Regular.ttf");
+    let system = if cfg!(target_os = "macos") {
+        PathBuf::from("/System/Library/Fonts/Supplemental/Arial.ttf")
+    } else if cfg!(target_os = "windows") {
+        PathBuf::from(r"C:\Windows\Fonts\arial.ttf")
+    } else {
+        PathBuf::from("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+    };
+    [bundled, system].into_iter().find_map(|path| {
+        std::fs::read(path)
+            .ok()
+            .and_then(|bytes| FontArc::try_from_vec(bytes).ok())
     })
 }
 
-#[derive(Default)]
-struct Mot16Challenge {
-    pub viewer: canvas::Cache,
-    pub active_tracks: Vec<Track>,
-    pub detections: Vec<Detection>,
-    pub frame_path: PathBuf,
+fn create_tracker() -> MultiObjectTracker {
+    MultiObjectTracker::new(TrackerConfig {
+        dt: 1.0 / 30.0,
+        min_iou: 0.25,
+        max_missed_frames: 15,
+        model: ModelConfig {
+            position: MotionModel::ConstantAcceleration,
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .expect("demo configuration is valid")
 }
 
-#[derive(Debug, Clone)]
-pub enum Message {
-    Void,
-    Tracking(Vec<Track>, Vec<Detection>, PathBuf),
+/// Run the same image loading, tracking and drawing as the GUI, without a window.
+fn check_sequence(
+    frames: Vec<FrameDetections>,
+    image_directory: PathBuf,
+    font: Option<FontArc>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut viewer = Viewer::new(frames, image_directory, font);
+    let (mut processed_frames, mut peak_tracks) = (0, 0);
+    while let Some(frame) = viewer.frames.next() {
+        viewer.render_frame(frame)?;
+        processed_frames += 1;
+        peak_tracks = peak_tracks.max(viewer.tracker.len());
+        if processed_frames % 100 == 0 {
+            println!("{}", viewer.status);
+        }
+    }
+    if processed_frames == 0 {
+        return Err("Sequence has no annotated frames".into());
+    }
+    println!(
+        "Checked {processed_frames} frames: images, tracking and overlays OK; peak tracks={peak_tracks}"
+    );
+    Ok(())
 }
 
-impl Application for Mot16Challenge {
-    type Message = Message;
-    type Executor = executor::Default;
+#[derive(Debug, Clone, Copy)]
+enum Message {
+    Tick,
+}
 
-    type Flags = ();
+struct Viewer {
+    frames: std::vec::IntoIter<FrameDetections>,
+    image_directory: PathBuf,
+    font: Option<FontArc>,
+    tracker: MultiObjectTracker,
+    image: Option<Handle>,
+    status: String,
+    finished: bool,
+}
 
-    fn new(_: Self::Flags) -> (Self, Command<Message>) {
-        (
-            Self {
-                viewer: Default::default(),
-                active_tracks: Vec::default(),
-                detections: Vec::default(),
-                frame_path: PathBuf::default(),
-            },
-            Command::none(),
-        )
+impl Viewer {
+    fn new(frames: Vec<FrameDetections>, image_directory: PathBuf, font: Option<FontArc>) -> Self {
+        Self {
+            frames: frames.into_iter(),
+            image_directory,
+            font,
+            tracker: create_tracker(),
+            image: None,
+            status: "White: track / Red: observation".into(),
+            finished: false,
+        }
     }
 
-    fn title(&self) -> String {
-        String::from("mot16_challenge")
-    }
-
-    fn update(&mut self, message: Message) -> Command<Message> {
-        match message {
-            Message::Tracking(active_tracks, detections, frame) => {
-                self.active_tracks = active_tracks;
-                self.detections = detections;
-                self.frame_path = frame;
-            }
-            _ => {}
+    fn update(&mut self, _: Message) {
+        let Some(frame) = self.frames.next() else {
+            self.finished = true;
+            return;
         };
-        Command::none()
+        match self.render_frame(frame) {
+            Ok(image) => self.image = Some(image),
+            Err(error) => {
+                self.status = error.to_string();
+                self.finished = true;
+            }
+        }
+    }
+
+    fn render_frame(
+        &mut self,
+        frame: FrameDetections,
+    ) -> Result<Handle, Box<dyn std::error::Error>> {
+        let path = video_frame_path(&self.image_directory, frame.number);
+        let mut image = image::open(&path)
+            .map_err(|error| format!("Cannot read {}: {error}", path.display()))?
+            .into_rgba8();
+        let tracks = self.tracker.step(frame.detections.clone())?;
+        let white = Rgba([255, 255, 255, 255]);
+        for detection in &frame.detections {
+            draw_box(&mut image, &detection.bounds, Rgba([255, 0, 0, 255]));
+        }
+        for track in tracks {
+            draw_box(&mut image, &track.bounds, white);
+            if let Some(font) = &self.font {
+                draw_text_mut(
+                    &mut image,
+                    white,
+                    track.bounds.min()[0] as i32,
+                    track.bounds.min()[1] as i32,
+                    12.0,
+                    font,
+                    &track.id[..8],
+                );
+            }
+        }
+        self.status = format!("Frame {} — White: track / Red: observation", frame.number);
+        Ok(Handle::from_rgba(
+            image.width(),
+            image.height(),
+            image.into_raw(),
+        ))
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        worker(0).map(|v| match v.1 {
-            Progress::Advanced(c, active_tracks, detections, frame) => {
-                Message::Tracking(active_tracks, detections, frame)
-            }
-            _ => Message::Void,
-        })
+        if self.finished {
+            Subscription::none()
+        } else {
+            iced::time::every(Duration::from_millis(33)).map(|_| Message::Tick)
+        }
     }
 
-    fn view(&mut self) -> Element<Message> {
-        self.viewer.clear();
-
-        let frame_path = self.frame_path.clone();
-        if frame_path.is_file() {
-            let mut img = image::open(frame_path.clone()).unwrap();
-            let white = Rgba([255u8, 255u8, 255u8, 255u8]);
-            let red = Rgba([255u8, 0u8, 0u8, 255u8]);
-
-            let font = Vec::from(include_bytes!(
-                "../assets/fonts/Dela_Gothic_One/DelaGothicOne-Regular.ttf"
-            ) as &[u8]);
-            let font = Font::try_from_vec(font).unwrap();
-
-            self.active_tracks.iter().for_each(|track| {
-                let x1 = track._box[0] as i32;
-                let y1 = track._box[1] as i32;
-                let x2 = track._box[2] as i32;
-                let y2 = track._box[3] as i32;
-
-                draw_hollow_rect_mut(
-                    &mut img,
-                    Rect::at(x1, y1).of_size((x2 - x1) as u32, (y2 - y1) as u32),
-                    white,
-                );
-
-                let track_text_id = format!("ID: {}", track.id);
-                let height = 12.0;
-                let scale = Scale {
-                    x: height,
-                    y: height,
-                };
-
-                draw_text_mut(
-                    &mut img,
-                    Rgba([255u8, 255u8, 255u8, 255u8]),
-                    x1,
-                    y1,
-                    scale,
-                    &font,
-                    &track_text_id,
-                );
-            });
-
-            self.detections.iter().for_each(|detection| {
-                if let Some(b) = &detection._box {
-                    let x1 = b[0] as i32;
-                    let y1 = b[1] as i32;
-                    let x2 = b[2] as i32;
-                    let y2 = b[3] as i32;
-
-                    draw_hollow_rect_mut(
-                        &mut img,
-                        Rect::at(x1, y1).of_size((x2 - x1) as u32, (y2 - y1) as u32),
-                        red,
-                    );
-                }
-            });
-
-            let w = img.width();
-            let h = img.height();
-            let mut bytes = vec![0u8; (w * h * 4) as usize];
-
-            for y in 0..img.height() {
-                for x in 0..img.width() {
-                    let pixel = img.get_pixel(x, y);
-                    let idx: usize = y as usize * w as usize * 4 + (x as usize * 4);
-
-                    bytes[idx + 0] = pixel[2];
-                    bytes[idx + 1] = pixel[1];
-                    bytes[idx + 2] = pixel[0];
-                    bytes[idx + 3] = pixel[3];
-                }
-            }
-
-            let image = Container::new(
-                Image::new(Handle::from_pixels(img.width(), img.height(), bytes))
+    fn view(&self) -> Element<'_, Message> {
+        let mut content = column![text(&self.status)];
+        if let Some(image) = &self.image {
+            content = content.push(
+                Image::new(image.clone())
                     .width(Length::Fill)
                     .height(Length::Fill),
-            )
+            );
+        }
+        container(content)
+            .padding(20)
+            .width(Length::Fill)
             .height(Length::Fill)
-            .width(Length::Fill);
-
-            let content = Column::new()
-                .width(Length::Fill)
-                .height(Length::Fill)
-                // .push(canvas)
-                .push(image);
-
-            Container::new(content)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .padding(20)
-                .into()
-        } else {
-            let content = Column::new().width(Length::Fill).height(Length::Fill);
-            Container::new(content)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .padding(20)
-                .into()
-        }
+            .into()
     }
 }
 
-impl<Message> canvas::Program<Message> for Mot16Challenge {
-    fn draw(&self, bounds: Rectangle, _cursor: canvas::Cursor) -> Vec<canvas::Geometry> {
-        let viewer = self.viewer.draw(bounds.size(), |frame| {
-            self.active_tracks.iter().for_each(|track| {
-                let rect = (
-                    track._box[0] as usize,
-                    track._box[1] as usize,
-                    track._box[2] as usize,
-                    track._box[3] as usize,
-                );
-                draw_rectangle(frame, rect, (0, 255, 0), false);
-            });
-        });
-
-        vec![viewer]
-    }
-}
-pub struct MyTracker {}
-
-impl MyTracker {
-    pub fn new() -> Self {
-        Self {}
-    }
-
-    pub fn create() -> MultiObjectTracker {
-        let model_spec = ModelPreset::constant_acceleration_and_static_box_size_2d();
-        let min_iou = 0.25;
-        let multi_match_min_iou = 1. + 1e-7;
-        let feature_similarity_fn = None;
-        let feature_similarity_beta = None;
-        let matching_fn = IOUAndFeatureMatchingFunction::new(
-            min_iou,
-            multi_match_min_iou,
-            feature_similarity_fn,
-            feature_similarity_beta,
-        );
-
-        let tracker = MultiObjectTracker::new(
-            1. / 30.,
-            model_spec,
-            Some(matching_fn),
-            Some(SingleObjectTrackerKwargs {
-                max_staleness: 15.,
-                ..Default::default()
-            }),
-            None,
-            None,
-        );
-
-        tracker
-    }
-}
-
-fn worker<I: 'static + Hash + Copy + Send + Sync>(id: I) -> iced::Subscription<(I, Progress)> {
-    let fps = 30.0;
-    let split = "train";
-    let seq_id = "04";
-    let sel = "gt";
-    let drop_detection_prob = 0.1;
-    let add_detection_noise = 5.0;
-
-    let dataset_root = "examples/mot16_challenge/MOT16";
-    let dataset_root = env::current_dir().unwrap().join(dataset_root);
-    let dataset_root2 = format!(
-        "{}/{}/MOT16-{}",
-        dataset_root.as_path().display().to_string(),
-        split,
-        seq_id
+fn draw_box(image: &mut RgbaImage, bounds: &BoundingBox, color: Rgba<u8>) {
+    let rectangle = Rect::at(bounds.min()[0] as i32, bounds.min()[1] as i32).of_size(
+        (bounds.extent(0) as u32).max(1),
+        (bounds.extent(1) as u32).max(1),
     );
-
-    let frames_dir = format!("{}/img1", dataset_root2);
-    let _dets_path = format!("{}/{}/{}.txt", dataset_root2, sel, sel);
-    let init_state = MyState::Ready(MyTracker::create(), 1000);
-    let dets_path = std::path::Path::new(_dets_path.as_str());
-    let dets_gen = read_detections(dets_path, drop_detection_prob, add_detection_noise);
-
-    let gen = Arc::new(Mutex::new(dets_gen));
-
-    subscription::unfold(id, init_state, move |state| {
-        let gen = gen.clone();
-        tracking(id, gen, state, frames_dir.clone())
-    })
-}
-
-async fn tracking<T, I: Copy>(
-    id: I,
-    gen: Arc<Mutex<T>>,
-    state: MyState,
-    frame_dir: String,
-) -> (Option<(I, Progress)>, MyState)
-where
-    T: Iterator<Item = (i64, Vec<Detection>)>,
-{
-    match state {
-        MyState::Ready(tracker, num_steps) => (
-            Some((id, Progress::Started)),
-            MyState::Tracking {
-                total: num_steps,
-                count: 0,
-                tracker: tracker,
-            },
-        ),
-        MyState::Tracking {
-            total,
-            count,
-            mut tracker,
-        } => {
-            if count <= total {
-                if let Some((frame_idx, det_gt)) = gen.lock().unwrap().next() {
-                    let target = det_gt
-                        .to_vec()
-                        .into_iter()
-                        .filter(|v| v._box.is_some())
-                        .collect::<Vec<_>>();
-
-                    let frame_dir_path = Path::new(&frame_dir);
-                    let frame = read_video_frame(frame_dir_path, frame_idx as u64);
-                    let active_tracks = tracker.step(target.clone());
-
-                    (
-                        Some((id, Progress::Advanced(count, active_tracks, target, frame))),
-                        MyState::Tracking {
-                            total,
-                            count: count + 1,
-                            tracker,
-                        },
-                    )
-                } else {
-                    (Some((id, Progress::Finished)), MyState::Finished)
-                }
-            } else {
-                (Some((id, Progress::Finished)), MyState::Finished)
-            }
-        }
-        MyState::Finished => (None, MyState::Finished),
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum Progress {
-    Started,
-    Advanced(usize, Vec<Track>, Vec<Detection>, PathBuf),
-    Finished,
-    Errored,
-}
-
-pub enum MyState {
-    Ready(MultiObjectTracker, usize),
-    Tracking {
-        total: usize,
-        count: usize,
-        tracker: MultiObjectTracker,
-    },
-    Finished,
+    draw_hollow_rect_mut(image, rectangle, color);
 }

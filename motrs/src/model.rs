@@ -1,535 +1,162 @@
-use nalgebra as na;
-use std::cmp::max;
-use std::fmt::Debug;
+use crate::{BoundingBox, Error, ModelConfig, MotionModel};
+use faer::{Mat, Scale};
 
-#[derive(Default)]
-pub struct ModelPreset {
-    pub order_pos: i32,
-    pub dim_pos: i32,
-    pub order_size: usize,
-    pub dim_size: usize,
+/// Immutable matrices shared by all tracks. State entries are grouped by axis:
+/// [position, velocity, acceleration, ...size and its derivatives...].
+pub(crate) struct MotionMatrices {
+    pub transition: Mat<f32>,
+    pub process_noise: Mat<f32>,
+    pub observation: Mat<f32>,
+    pub measurement_noise: Mat<f32>,
+    pub initial_covariance: Mat<f32>,
+    dimensions: usize,
+    position_stride: usize,
+    size_stride: usize,
 }
 
-impl ModelPreset {
-    pub fn new() -> Self {
-        ModelPreset {
-            ..Default::default()
-        }
-    }
+impl MotionMatrices {
+    pub fn new(config: &ModelConfig, dt: f32) -> Self {
+        let position_stride = config.position.state_size();
+        let size_stride = config.size.state_size();
+        let state_size = config.dimensions * (position_stride + size_stride);
+        let measurement_size = config.dimensions * 2;
+        let mut transition = Mat::zeros(state_size, state_size);
+        let mut process_noise = Mat::zeros(state_size, state_size);
+        let mut observation = Mat::zeros(measurement_size, state_size);
+        let mut measurement_noise = Mat::zeros(measurement_size, measurement_size);
+        let mut state_offset = 0;
 
-    pub fn constant_velocity_and_static_box_size_2d() -> Self {
-        Self {
-            order_pos: 1,
-            dim_pos: 2,
-            order_size: 0,
-            dim_size: 2,
-        }
-    }
-
-    pub fn constant_acceleration_and_static_box_size_2d() -> Self {
-        Self {
-            order_pos: 2,
-            dim_pos: 2,
-            order_size: 0,
-            dim_size: 2,
-        }
-    }
-}
-
-fn base_dim_block<T: num_traits::NumCast + na::RealField>(dt: T, order: usize) -> na::DMatrix<T> {
-    let dt: f32 = dt.to_f32().unwrap_or_default();
-
-    let block =
-        na::DMatrix::from_row_slice(3, 3, &[1., dt, (dt.powf(2.)) / 2., 0., 1., dt, 0., 0., 1.]);
-
-    let cutoff = order + 1;
-    na::DMatrix::from_fn(cutoff, cutoff, |r, c| T::from_f32(block[(r, c)]).unwrap())
-}
-
-fn zero_pad<T: na::RealField>(arr: na::DMatrix<T>, length: usize) -> na::DMatrix<T> {
-    let mut ret = na::DMatrix::zeros(1, length);
-    ret.index_mut((.., ..arr.shape().1)).copy_from(&arr);
-    ret
-}
-
-fn repeat_vec<T: Clone>(x: Vec<T>, size: usize) -> Vec<T> {
-    x.iter()
-        .cycle()
-        .take(x.len() * size)
-        .cloned()
-        .collect::<Vec<_>>()
-}
-
-fn block_diag(arrs: Vec<na::DMatrix<f32>>) -> na::DMatrix<f32> {
-    let shapes = arrs
-        .iter()
-        .map(|m| {
-            let (a, b) = m.shape();
-            vec![a, b]
-        })
-        .collect::<Vec<_>>();
-
-    let sum_shapes = na::DMatrix::from_row_slice(
-        arrs.len(),
-        2,
-        shapes
-            .clone()
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
-            .as_slice(),
-    );
-    let sum_shape = sum_shapes.row_sum();
-
-    let mut out = na::DMatrix::zeros(sum_shape[(0, 0)], sum_shape[(0, 1)]);
-
-    let mut r = 0;
-    let mut c = 0;
-
-    for (i, sh) in shapes.iter().enumerate() {
-        let rr = sh[0];
-        let cc = sh[1];
-        for row in r..(r + rr) {
-            for column in c..(c + cc) {
-                out[(row, column)] = arrs[i][(row - r, column - c)];
+        for (measurement_group, motion, process_variance, measurement_variance) in [
+            (
+                0,
+                config.position,
+                config.position_process_variance,
+                config.position_measurement_variance,
+            ),
+            (
+                config.dimensions,
+                config.size,
+                config.size_process_variance,
+                config.size_measurement_variance,
+            ),
+        ] {
+            let stride = motion.state_size();
+            let axis_transition = transition_block(motion, dt);
+            let axis_noise = process_noise_block(motion, dt, process_variance);
+            for axis in 0..config.dimensions {
+                transition
+                    .submatrix_mut(state_offset, state_offset, stride, stride)
+                    .copy_from(&axis_transition);
+                process_noise
+                    .submatrix_mut(state_offset, state_offset, stride, stride)
+                    .copy_from(&axis_noise);
+                observation[(measurement_group + axis, state_offset)] = 1.0;
+                measurement_noise[(measurement_group + axis, measurement_group + axis)] =
+                    measurement_variance;
+                state_offset += stride;
             }
         }
-        // out.index_mut((r..(r+rr), c..(c+cc))).copy_from(&arrs[i]);
-
-        r += rr;
-        c += cc;
-    }
-
-    out
-}
-
-fn eye(block: usize) -> na::DMatrix<f32> {
-    na::DMatrix::identity(block, block)
-}
-
-pub struct Model {
-    pub dt: f32,
-    pub order_pos: usize,
-    pub dim_pos: usize,
-    pub order_size: usize,
-    pub dim_size: usize,
-    pub q_var_pos: f32,
-    pub q_var_size: f32,
-    pub r_var_pos: f32,
-    pub r_var_size: f32,
-    pub p_cov_p0: f32,
-    pub dim_box: usize,
-    pub pos_idxs: Vec<usize>,
-    pub size_idxs: Vec<usize>,
-    pub z_in_x_ids: Vec<usize>,
-    pub offset_idx: usize,
-    pub state_length: usize,
-    pub measurement_lengths: usize,
-}
-
-#[derive(Clone, Debug)]
-pub struct ModelKwargs {
-    pub order_pos: i32,
-    pub dim_pos: i32,
-    pub order_size: usize,
-    pub dim_size: usize,
-    pub q_var_pos: f32,
-    pub q_var_size: f32,
-    pub r_var_pos: f32,
-    pub r_var_size: f32,
-    pub p_cov_p0: f32,
-}
-
-impl Default for ModelKwargs {
-    fn default() -> Self {
         Self {
-            order_pos: 1,
-            dim_pos: 2,
-            order_size: 0,
-            dim_size: 2,
-            q_var_pos: 70.,
-            q_var_size: 10.,
-            r_var_pos: 1.,
-            r_var_size: 1.,
-            p_cov_p0: 1000.,
+            transition,
+            process_noise,
+            observation,
+            measurement_noise,
+            initial_covariance: Mat::<f32>::identity(state_size, state_size)
+                * Scale(config.initial_state_variance),
+            dimensions: config.dimensions,
+            position_stride,
+            size_stride,
+        }
+    }
+
+    pub fn initial_state(&self, bounds: &BoundingBox) -> Mat<f32> {
+        let mut state = Mat::zeros(self.transition.nrows(), 1);
+        for axis in 0..self.dimensions {
+            state[(axis * self.position_stride, 0)] = bounds.center(axis);
+            let size_index = self.dimensions * self.position_stride + axis * self.size_stride;
+            state[(size_index, 0)] = bounds.extent(axis);
+        }
+        state
+    }
+
+    pub fn measurement(&self, bounds: &BoundingBox) -> Mat<f32> {
+        Mat::from_fn(self.dimensions * 2, 1, |row, _| {
+            if row < self.dimensions {
+                bounds.center(row)
+            } else {
+                bounds.extent(row - self.dimensions)
+            }
+        })
+    }
+
+    pub fn bounds(&self, state: &Mat<f32>) -> Result<BoundingBox, Error> {
+        let mut min = Vec::with_capacity(self.dimensions);
+        let mut max = Vec::with_capacity(self.dimensions);
+        for axis in 0..self.dimensions {
+            let center = state[(axis * self.position_stride, 0)];
+            let size_index = self.dimensions * self.position_stride + axis * self.size_stride;
+            let half_extent = state[(size_index, 0)] * 0.5;
+            min.push(center - half_extent);
+            max.push(center + half_extent);
+        }
+        BoundingBox::new(min, max)
+    }
+}
+
+fn transition_block(motion: MotionModel, dt: f32) -> Mat<f32> {
+    match motion {
+        MotionModel::Static => faer::mat![[1.0]],
+        MotionModel::ConstantVelocity => faer::mat![[1.0, dt], [0.0, 1.0]],
+        MotionModel::ConstantAcceleration => {
+            faer::mat![[1.0, dt, dt * dt * 0.5], [0.0, 1.0, dt], [0.0, 0.0, 1.0]]
         }
     }
 }
 
-impl Model {
-    pub fn new(dt: f32, kwargs: Option<ModelKwargs>) -> Self {
-        let kwargs = kwargs.unwrap_or_default();
-
-        let order_pos = kwargs.order_pos as usize;
-        let dim_pos = kwargs.dim_pos as usize;
-        let order_size = kwargs.order_size as usize;
-        let dim_size = kwargs.dim_size as usize;
-        let q_var_pos = kwargs.q_var_pos;
-        let q_var_size = kwargs.q_var_size;
-        let r_var_pos = kwargs.r_var_pos;
-        let r_var_size = kwargs.r_var_size;
-        let p_cov_p0 = kwargs.p_cov_p0;
-
-        let dim_box = 2 * max(dim_pos, dim_size);
-        let (pos_idxs, size_idxs, offset_idx) =
-            Self::_calc_idxs(dim_pos, dim_size, order_pos, order_size);
-
-        let z_in_x_ids = pos_idxs
-            .iter()
-            .chain(&size_idxs)
-            .cloned()
-            .collect::<Vec<_>>();
-
-        let state_length = dim_pos * (order_pos + 1) + dim_size * (order_size + 1);
-        let measurement_lengths = dim_pos + dim_size;
-
-        Self {
-            dt,
-            dim_box,
-            dim_pos,
-            dim_size,
-            pos_idxs,
-            size_idxs,
-            order_pos,
-            order_size,
-            q_var_pos,
-            q_var_size,
-            r_var_pos,
-            r_var_size,
-            p_cov_p0,
-            z_in_x_ids,
-            offset_idx,
-            state_length,
-            measurement_lengths,
-        }
-    }
-
-    fn _calc_idxs(
-        dim_pos: usize,
-        dim_size: usize,
-        order_pos: usize,
-        order_size: usize,
-    ) -> (Vec<usize>, Vec<usize>, usize) {
-        let offset_idx = max(dim_pos, dim_size);
-        let pos_idxs: Vec<usize> = (0..dim_pos).map(|pidx| pidx * (order_pos + 1)).collect();
-        let size_idxs: Vec<usize> = (0..dim_size)
-            .map(|sidx| dim_pos * (order_pos + 1) + sidx * (order_size + 1))
-            .collect();
-
-        (pos_idxs, size_idxs, offset_idx)
-    }
-
-    pub fn build_F(&self) -> na::DMatrix<f32> {
-        let block_pos = base_dim_block(self.dt, self.order_pos);
-        let block_size = base_dim_block(self.dt, self.order_size);
-
-        let diag_components = {
-            let _block_pos = repeat_vec(vec![block_pos], self.dim_pos);
-            let _block_size = repeat_vec(vec![block_size], self.dim_size);
-            let mut diag_components = Vec::new();
-
-            diag_components.extend(_block_pos);
-            diag_components.extend(_block_size);
-
-            diag_components
-        };
-
-        block_diag(diag_components)
-    }
-
-    pub fn build_Q(&self) -> na::DMatrix<f32> {
-        let var_pos = self.q_var_pos;
-        let var_size = self.q_var_size as f32;
-
-        let q_pos = if self.order_pos == 0 {
-            na::dmatrix![var_pos]
-        } else {
-            crate::Q_discrete_white_noise(self.order_pos + 1, self.dt, var_pos, 1, true)
-        };
-
-        let q_size = if self.order_size == 0 {
-            na::dmatrix![var_size]
-        } else {
-            crate::Q_discrete_white_noise(self.order_size + 1, self.dt, var_size, 1, true)
-        };
-
-        let diag_components = {
-            let block_pos = repeat_vec(vec![q_pos], self.dim_pos);
-            let block_size = repeat_vec(vec![q_size], self.dim_size);
-            block_pos.into_iter().chain(block_size).collect()
-        };
-
-        block_diag(diag_components)
-    }
-
-    pub fn build_H(&self) -> na::DMatrix<f32> {
-        fn _base_block(order: usize) -> na::DMatrix<f32> {
-            let a = vec![1.];
-            let b = repeat_vec(vec![0.], order);
-            na::DMatrix::from_vec(1, order + 1, a.into_iter().chain(b).collect::<Vec<_>>())
-        }
-
-        let block_pos = repeat_vec(vec![_base_block(self.order_pos)], self.dim_pos);
-        let block_size = repeat_vec(vec![_base_block(self.order_size)], self.dim_size);
-        let diag_components = block_pos.into_iter().chain(block_size).collect();
-
-        block_diag(diag_components)
-    }
-
-    pub fn build_P(&self) -> na::DMatrix<f32> {
-        let n = eye(self.state_length);
-        n * self.p_cov_p0
-    }
-
-    pub fn build_R(&self) -> na::DMatrix<f32> {
-        let block_pos = eye(self.dim_pos) * self.r_var_pos;
-        let block_size = eye(self.dim_size) * (self.r_var_size as f32);
-
-        block_diag(vec![block_pos, block_size])
-    }
-
-    pub fn box_to_z(&self, _box: na::DMatrix<f32>) -> na::DMatrix<f32> {
-        let rep = _box.iter().map(|v| *v).collect::<Vec<f32>>();
-        let _box = na::DMatrix::from_row_slice(2, self.dim_box / 2, rep.as_slice());
-        let a = _box.row_sum() / 2.0;
-        let center = a.columns(0, self.dim_pos);
-        let b = _box.index((1, ..)) - _box.index((0, ..));
-        let length = b.columns(0, self.dim_size);
-
-        let mut result = center.iter().copied().collect::<Vec<f32>>();
-        result.append(&mut length.iter().copied().collect::<Vec<f32>>());
-
-        na::DMatrix::from_row_slice(1, result.len(), result.as_slice())
-    }
-
-    pub fn box_to_x(&self, _box: na::DMatrix<f32>) -> na::DMatrix<f32> {
-        let mut x: na::DMatrix<f32> = na::DMatrix::zeros(1, self.state_length);
-        let z = self.box_to_z(_box);
-        for (idx, i) in self.z_in_x_ids.iter().enumerate() {
-            x[*i] = z[idx];
-        }
-        x
-    }
-
-    pub fn x_to_box(&self, x: &na::DMatrix<f32>) -> na::DMatrix<f32> {
-        let size = max(self.dim_pos, self.dim_size);
-
-        let mut xs = Vec::default();
-        for i in &self.pos_idxs {
-            xs.push(x[*i]);
-        }
-        let center = zero_pad(
-            na::DMatrix::from_row_slice(1, xs.len(), xs.as_slice()),
-            size,
-        );
-
-        let mut ys = Vec::default();
-        for i in &self.size_idxs {
-            ys.push(x[*i]);
-        }
-        let length = zero_pad(
-            na::DMatrix::from_row_slice(1, ys.len(), ys.as_slice()),
-            size,
-        );
-
-        let mut result = (center.clone() - length.clone() / 2.)
-            .iter()
-            .map(|v| *v)
-            .collect::<Vec<f32>>();
-        result.append(
-            &mut (center + length / 2.)
-                .iter()
-                .map(|v| *v)
-                .collect::<Vec<f32>>(),
-        );
-
-        na::DMatrix::from_row_slice(1, result.len(), result.as_slice())
-    }
+fn process_noise_block(motion: MotionModel, dt: f32, variance: f32) -> Mat<f32> {
+    // Discrete white noise is the outer product of its effect on each state
+    // derivative, multiplied by the driving-noise variance.
+    let influence = match motion {
+        MotionModel::Static => faer::mat![[1.0]],
+        MotionModel::ConstantVelocity => faer::mat![[0.5 * dt * dt], [dt]],
+        MotionModel::ConstantAcceleration => faer::mat![[0.5 * dt * dt], [dt], [1.0]],
+    };
+    &influence * influence.transpose() * Scale(variance)
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
-    use approx::*;
+    use approx::assert_relative_eq;
 
     #[test]
-    fn test_zero_pad() {
-        let arr = na::dmatrix![1., 2., 3.];
-        let pad_arr = zero_pad(arr, 5);
-
-        assert!(pad_arr == na::dmatrix![1., 2., 3., 0., 0.])
-    }
-
-    #[test]
-    fn test_repeat_vec() {
-        let arr = vec![1., 2., 3.];
-        assert!(repeat_vec(arr, 3) == vec![1., 2., 3., 1., 2., 3., 1., 2., 3.])
-    }
-
-    #[test]
-    fn test_block_diag() {
-        let a = na::DMatrix::from_row_slice(2, 2, &[1., 0., 0., 1.]);
-        let b = na::DMatrix::from_row_slice(2, 3, &[3., 4., 5., 6., 7., 8.]);
-        let c = na::DMatrix::from_row_slice(1, 1, &[7.]);
-
-        let expect = na::DMatrix::from_row_slice(
-            5,
-            6,
-            &[
-                1., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 3., 4., 5., 0., 0., 0., 6.,
-                7., 8., 0., 0., 0., 0., 0., 0., 7.,
-            ],
+    fn noise_coefficients_follow_the_outer_product() {
+        let noise = process_noise_block(MotionModel::ConstantVelocity, 2.0, 3.0);
+        assert_eq!(noise, faer::mat![[12.0, 12.0], [12.0, 12.0]]);
+        let noise = process_noise_block(MotionModel::ConstantAcceleration, 2.0, 3.0);
+        assert_eq!(
+            noise,
+            faer::mat![[12.0, 12.0, 6.0], [12.0, 12.0, 6.0], [6.0, 6.0, 3.0]]
         );
-
-        let out = block_diag(vec![a, b, c]);
-
-        assert!(out == expect)
     }
 
     #[test]
-    fn test_eye() {
-        let a = eye(3);
-        let actual = a * 3.0;
-        let expect = na::DMatrix::from_row_slice(3, 3, &[3., 0., 0., 0., 3., 0., 0., 0., 3.]);
-
-        assert!(actual == expect)
-    }
-
-    #[test]
-    fn test_builder() {
-        let kwargs = ModelKwargs {
-            r_var_pos: 0.1,
-            r_var_size: 0.3,
-            p_cov_p0: 100.,
-            ..Default::default()
-        };
-        let m1 = Model::new(0.1, Some(kwargs));
-
-        assert!(m1.state_length == 6);
-        assert!(m1.measurement_lengths == 4);
-
-        let F1 = m1.build_F();
-        let F1_exp = na::DMatrix::from_row_slice(
-            6,
-            6,
-            &[
-                1., 0.1, 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 1., 0.1, 0., 0., 0., 0.,
-                0., 1., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 1.,
-            ],
-        );
-
-        assert!(F1_exp == F1);
-
-        let H1 = m1.build_H();
-        let H1_exp = na::DMatrix::from_row_slice(
-            4,
-            6,
-            &[
-                1., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0.,
-                0., 0., 1.,
-            ],
-        );
-        assert!(H1_exp == H1);
-
-        _ = m1.build_Q();
-
-        let R1 = m1.build_R();
-        let R1_exp = na::DMatrix::from_row_slice(
-            4,
-            4,
-            &[
-                0.1, 0., 0., 0., 0., 0.1, 0., 0., 0., 0., 0.3, 0., 0., 0., 0., 0.3,
-            ],
-        );
-        assert!(R1 == R1_exp);
-
-        _ = m1.build_P();
-
-        let mut kwargs = ModelKwargs {
-            order_pos: 2,
-            dim_pos: 1,
-            order_size: 1,
-            dim_size: 1,
-            ..Default::default()
-        };
-        let m2 = Model::new(0.1, Some(kwargs));
-        let F2 = m2.build_F();
-        let F2_exp = na::DMatrix::from_row_slice(
-            5,
-            5,
-            &[
-                1., 0.1, 0.005, 0., 0., 0., 1., 0.1, 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 1.,
-                0.1, 0., 0., 0., 0., 1.,
-            ],
-        );
-
-        assert_relative_eq!(F2_exp, F2, epsilon = 1e-3f32);
-    }
-
-    #[test]
-    fn test_state_to_observation_converters() {
-        let kwargs = ModelKwargs {
-            order_pos: 1,
-            dim_pos: 2,
-            order_size: 0,
-            dim_size: 2,
-            ..Default::default()
-        };
-
-        let model = Model::new(0.1, Some(kwargs));
-        let _box = na::dmatrix![10., 10., 20., 30.];
-
-        let x = model.box_to_x(_box.clone());
-        assert!(na::dmatrix![15., 0., 20., 0., 10., 20.] == x);
-
-        let box_ret = model.x_to_box(&x);
-        assert!(box_ret == _box);
-
-        let kwargs = ModelKwargs {
-            order_pos: 1,
-            dim_pos: 3,
-            order_size: 0,
-            dim_size: 3,
-            ..Default::default()
-        };
-        let model = Model::new(0.1, Some(kwargs));
-        let _box = na::dmatrix![10., 10., 10., 20., 30., 40.];
-        let x = model.box_to_x(_box.clone());
-
-        assert!(na::dmatrix![15., 0., 20., 0., 25., 0., 10., 20., 30.] == x);
-
-        let box_ret = model.x_to_box(&x);
-        assert!(box_ret == _box);
-    }
-
-    #[test]
-    fn test_box_to_z() {
-        let kwargs = ModelKwargs {
-            order_pos: 1,
-            dim_pos: 2,
-            order_size: 0,
-            dim_size: 2,
-            ..Default::default()
-        };
-
-        let model = Model::new(0.1, Some(kwargs));
-        let _box = na::dmatrix![10f32, 10., 20., 20.];
-        let result = model.box_to_z(_box);
-
-        assert!(result == na::dmatrix![15., 15., 10., 10.]);
-
-        let mut kwargs = ModelKwargs {
-            order_pos: 1,
-            dim_pos: 3,
-            order_size: 1,
-            dim_size: 2,
-            ..Default::default()
-        };
-
-        let model = Model::new(0.1, Some(kwargs));
-        let _box = na::dmatrix![10f32, 10., 0., 20., 20., 50.];
-        let result = model.box_to_z(_box);
-
-        assert!(result == na::dmatrix![15., 15., 25., 10., 10.]);
+    fn state_round_trip_preserves_two_and_three_dimensional_boxes() {
+        for dimensions in [2, 3] {
+            let config = ModelConfig {
+                dimensions,
+                position: MotionModel::ConstantAcceleration,
+                ..Default::default()
+            };
+            let model = MotionMatrices::new(&config, 0.1);
+            let bounds = BoundingBox::new(vec![10.0; dimensions], vec![20.0; dimensions]).unwrap();
+            let state = model.initial_state(&bounds);
+            assert_eq!(model.bounds(&state).unwrap(), bounds);
+            let observation = &model.observation * state;
+            for axis in 0..dimensions {
+                assert_relative_eq!(observation[(axis, 0)], 15.0);
+                assert_relative_eq!(observation[(dimensions + axis, 0)], 10.0);
+            }
+        }
     }
 }

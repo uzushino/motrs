@@ -1,87 +1,155 @@
 use gloo_utils::format::JsValueSerdeExt;
-use motrs::matrix::matrix_to_vec;
-use motrs::model::*;
-use motrs::tracker::*;
-use nalgebra as na;
-use serde_derive::{Deserialize, Serialize};
+use motrs::{BoundingBox, Detection, ModelConfig, MotionModel, MultiObjectTracker, TrackerConfig};
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
-use web_sys::console;
 
+/// JavaScript facade for two-dimensional tracking.
 #[wasm_bindgen]
 pub struct MOT {
     tracker: MultiObjectTracker,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct TrackBox {
-    pub id: String,
-    pub _box: Vec<f32>,
-    pub score: Option<f32>,
-    pub class_id: Option<i64>,
+#[derive(Deserialize)]
+struct InputBox {
+    #[serde(rename = "_box")]
+    bounds: [f32; 4],
+    #[serde(default = "default_score")]
+    score: f32,
+    #[serde(default)]
+    class_id: Option<i64>,
+    #[serde(default)]
+    feature: Option<Vec<f32>>,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct Box {
-    pub _box: Vec<f32>,
+fn default_score() -> f32 {
+    1.0
+}
+
+impl TryFrom<InputBox> for Detection {
+    type Error = motrs::Error;
+
+    fn try_from(input: InputBox) -> Result<Self, Self::Error> {
+        let [left, top, right, bottom] = input.bounds;
+        Ok(Self {
+            bounds: BoundingBox::new([left, top], [right, bottom])?,
+            score: input.score,
+            class_id: input.class_id,
+            feature: input.feature,
+        })
+    }
+}
+
+#[derive(Serialize)]
+struct OutputBox {
+    id: String,
+    #[serde(rename = "_box")]
+    bounds: [f32; 4],
+    score: f32,
+    class_id: Option<i64>,
+    missed_frames: u32,
+}
+
+impl From<motrs::Track> for OutputBox {
+    fn from(track: motrs::Track) -> Self {
+        Self {
+            id: track.id,
+            bounds: [
+                track.bounds.min()[0],
+                track.bounds.min()[1],
+                track.bounds.max()[0],
+                track.bounds.max()[1],
+            ],
+            score: track.score,
+            class_id: track.class_id,
+            missed_frames: track.missed_frames,
+        }
+    }
+}
+
+fn js_error(error: impl std::fmt::Display) -> JsValue {
+    JsError::new(&error.to_string()).into()
 }
 
 #[wasm_bindgen]
 impl MOT {
     pub fn new() -> Self {
-        let model_spec = ModelPreset::constant_acceleration_and_static_box_size_2d();
-        let min_iou = 0.1;
-        let multi_match_min_iou = 1. + 1e-7;
-        let feature_similarity_fn = None;
-        let feature_similarity_beta = None;
-        let matching_fn = IOUAndFeatureMatchingFunction::new(
-            min_iou,
-            multi_match_min_iou,
-            feature_similarity_fn,
-            feature_similarity_beta,
-        );
+        Self::with_max_missed_frames(15)
+    }
 
-        let tracker = MultiObjectTracker::new(
-            0.1, // fps
-            model_spec,
-            Some(matching_fn),
-            Some(SingleObjectTrackerKwargs {
-                max_staleness: 15.,
+    /// Create a tracker with a configurable lifetime for unobserved objects.
+    pub fn with_max_missed_frames(max_missed_frames: u32) -> Self {
+        let tracker = MultiObjectTracker::new(TrackerConfig {
+            model: ModelConfig {
+                position: MotionModel::ConstantAcceleration,
                 ..Default::default()
-            }),
-            None,
-            None,
-        );
-
+            },
+            max_missed_frames,
+            ..Default::default()
+        })
+        .expect("WASM configuration is valid");
         Self { tracker }
     }
 
-    pub fn step(&mut self, val: &JsValue) {
-        let _box: Vec<Box> = val.into_serde().unwrap();
-
-        let _box = na::DMatrix::from_row_slice(1, 4, &_box[0]._box);
-        let dets = Detection {
-            _box: Some(_box.clone()),
-            score: 1.,
-            class_id: 1,
-            feature: None,
-        };
-        //console::log_1(&format!("{:?}", self.tracker.detections_matched_ids).into())
-        self.tracker.step(vec![dets]);
+    /// Accept every detection in the array. An empty array advances a missed frame.
+    /// Malformed input throws a JavaScript error before advancing the tracker.
+    pub fn step(&mut self, value: &JsValue) -> Result<(), JsValue> {
+        let inputs: Vec<InputBox> = value.into_serde().map_err(js_error)?;
+        let detections = inputs
+            .into_iter()
+            .map(Detection::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(js_error)?;
+        self.tracker.step(detections).map_err(js_error)?;
+        Ok(())
     }
 
-    pub fn active_tracks(&mut self) -> JsValue {
-        let tracks = self.tracker.active_tracks();
+    pub fn active_tracks(&self) -> Result<JsValue, JsValue> {
+        let tracks = self
+            .tracker
+            .active_tracks()
+            .into_iter()
+            .map(OutputBox::from)
+            .collect::<Vec<_>>();
+        JsValue::from_serde(&tracks).map_err(js_error)
+    }
+}
 
-        let track_objects = tracks
-            .iter()
-            .map(|v| TrackBox {
-                id: v.id.clone(),
-                _box: matrix_to_vec(&v._box),
-                score: v.score,
-                class_id: v.class_id,
+impl Default for MOT {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn input_and_output_preserve_corner_order_and_metadata() {
+        let detection = Detection::try_from(InputBox {
+            bounds: [1.0, 2.0, 11.0, 22.0],
+            score: 0.8,
+            class_id: Some(3),
+            feature: None,
+        })
+        .unwrap();
+        let mut tracker = MultiObjectTracker::default();
+        let output = OutputBox::from(tracker.step([detection]).unwrap().remove(0));
+        assert_eq!(output.bounds, [1.0, 2.0, 11.0, 22.0]);
+        assert_eq!(output.score, 0.8);
+        assert_eq!(output.class_id, Some(3));
+    }
+
+    #[test]
+    fn invalid_bounds_are_rejected_instead_of_panicking() {
+        assert!(
+            Detection::try_from(InputBox {
+                bounds: [10.0, 2.0, 1.0, 22.0],
+                score: 1.0,
+                class_id: None,
+                feature: None,
             })
-            .collect::<Vec<TrackBox>>();
-
-        JsValue::from_serde(&track_objects).unwrap()
+            .is_err()
+        );
     }
 }

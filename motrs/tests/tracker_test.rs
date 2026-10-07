@@ -1,144 +1,170 @@
-use std::collections::HashMap;
-
-use motrs::model::*;
-use motrs::tracker::*;
-
 use approx::assert_relative_eq;
-use nalgebra as na;
-use nalgebra::dmatrix;
+use motrs::{BoundingBox, Detection, ModelConfig, MotionModel, MultiObjectTracker, TrackerConfig};
 
-mod testing;
-use testing::data_generator;
+fn detection(offset: f32, dimensions: usize) -> Detection {
+    Detection::new(
+        BoundingBox::new(vec![offset; dimensions], vec![offset + 10.0; dimensions]).unwrap(),
+    )
+}
 
 #[test]
-fn test_simple_tracking_objects_1() {
-    let fps = 24.;
-    let dt = 1. / fps;
-    let num_steps = 240;
-    let num_steps_warmup = 1. * fps;
-
-    let mut model_spec = ModelPreset::constant_velocity_and_static_box_size_2d();
-    model_spec.order_pos = 1;
-
-    let min_iou = 0.1;
-    let multi_match_min_iou = 1. + 1e-7;
-    let feature_similarity_fn = None;
-    let feature_similarity_beta = None;
-    let matching_fn = IOUAndFeatureMatchingFunction::new(
-        min_iou,
-        multi_match_min_iou,
-        feature_similarity_fn,
-        feature_similarity_beta,
-    );
-    let mut mot = MultiObjectTracker::new(
-        dt,
-        model_spec,
-        Some(matching_fn),
-        None,
-        None,
-        Some(ActiveTracksKwargs::default()),
-    );
-    let mut history: HashMap<i64, Vec<String>> = HashMap::from([(0, vec![]), (1, vec![])]);
-    let mut gen = data_generator(num_steps, 2, 0.01, 0.2, 0.0, 1.0).into_iter();
-
-    for i in 0..num_steps {
-        if let Some((dets_gt, dets_pred)) = gen.next() {
-            let detections = dets_pred
-                .into_iter()
-                .filter(|d| d._box.is_some())
-                .collect::<Vec<_>>();
-            let _ = mot.step(detections);
-
-            if (i as f32) <= num_steps_warmup {
-                continue;
-            }
-
-            let matches = match_by_cost_matrix(
-                &mot.trackers,
-                &dets_gt,
-                min_iou,
-                multi_match_min_iou,
-                None,
-                feature_similarity_beta,
-            );
-
-            for m in 0..matches.shape().0 {
-                let (gidx, tidx) = (matches[(m, 0)], matches[(m, 1)]);
-                let track_id = mot.trackers[tidx as usize].id();
-
-                history
-                    .get_mut(&(gidx as i64))
-                    .map(|f| f.push(track_id.to_string()));
+fn follows_motion_with_stable_ids_in_one_two_and_three_dimensions() {
+    for dimensions in [1, 2, 3] {
+        for position in [
+            MotionModel::ConstantVelocity,
+            MotionModel::ConstantAcceleration,
+        ] {
+            let mut tracker = MultiObjectTracker::new(TrackerConfig {
+                model: ModelConfig {
+                    dimensions,
+                    position,
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+            .unwrap();
+            let first = tracker
+                .step([detection(0.0, dimensions), detection(100.0, dimensions)])
+                .unwrap();
+            for frame in 1..100 {
+                let offset = frame as f32 * 0.2;
+                // Observation order changes, but the identities must stay stable.
+                let tracks = tracker
+                    .step([
+                        detection(offset + 100.0, dimensions),
+                        detection(offset, dimensions),
+                    ])
+                    .unwrap();
+                assert_eq!(tracks.len(), 2);
+                assert_eq!(
+                    tracker.matched_ids(),
+                    &[first[1].id.clone(), first[0].id.clone()]
+                );
+                for axis in 0..dimensions {
+                    assert_relative_eq!(tracks[0].bounds.min()[axis], offset, epsilon = 0.1);
+                    assert_relative_eq!(
+                        tracks[1].bounds.min()[axis],
+                        offset + 100.0,
+                        epsilon = 0.1
+                    );
+                }
             }
         }
-
-        assert!(mot.trackers.len() == 2);
     }
 }
 
 #[test]
-fn test_tracker_diverges() {
-    let spec = ModelPreset::constant_velocity_and_static_box_size_2d();
-    let _box = dmatrix![0., 0., 10., 10.];
-    let mut mot = MultiObjectTracker::new(
-        0.1,
-        spec,
-        Some(IOUAndFeatureMatchingFunction::default()),
-        None,
-        None,
-        None,
-    );
-    mot.step(vec![Detection {
-        _box: Some(_box),
+fn missed_observations_are_predicted_and_recovery_resets_the_counter() {
+    let mut tracker = MultiObjectTracker::new(TrackerConfig {
+        max_missed_frames: 2,
         ..Default::default()
-    }]);
-
-    assert!(mot.trackers.len() == 1);
-
-    let _ = mot.active_tracks()[0].id.clone();
-
-    assert_relative_eq!(mot.trackers[0].model().dt, 0.1, epsilon = 1e-3f32)
+    })
+    .unwrap();
+    let first = tracker.step([detection(0.0, 2)]).unwrap().remove(0);
+    tracker.step([detection(0.2, 2)]).unwrap();
+    let predicted = tracker.step([]).unwrap().remove(0);
+    assert_eq!(predicted.id, first.id);
+    assert_eq!(predicted.missed_frames, 1);
+    assert!(predicted.bounds.min()[0] > 0.2);
+    let recovered = tracker.step([detection(0.6, 2)]).unwrap().remove(0);
+    assert_eq!(recovered.id, first.id);
+    assert_eq!(recovered.missed_frames, 0);
+    assert_eq!(recovered.hits, 3);
+    assert_eq!(recovered.age, 4);
+    assert_eq!(tracker.step([]).unwrap().len(), 1);
+    assert_eq!(tracker.step([]).unwrap().len(), 1);
+    assert!(tracker.step([]).unwrap().is_empty());
+    assert!(tracker.is_empty());
 }
 
 #[test]
-fn main() {
-    let model_spec = ModelPreset::constant_velocity_and_static_box_size_2d();
-    let min_iou = 0.1;
-    let multi_match_min_iou = 1. + 1e-7;
-    let feature_similarity_fn = None;
-    let feature_similarity_beta = None;
-    let matching_fn = IOUAndFeatureMatchingFunction::new(
-        min_iou,
-        multi_match_min_iou,
-        feature_similarity_fn,
-        feature_similarity_beta,
+fn new_tracks_are_current_and_confirmation_requires_observations() {
+    let mut tracker = MultiObjectTracker::new(TrackerConfig {
+        min_hits: 2,
+        ..Default::default()
+    })
+    .unwrap();
+    assert!(tracker.step([detection(0.0, 2)]).unwrap().is_empty());
+    assert_eq!(tracker.len(), 1);
+    assert!(tracker.step([]).unwrap().is_empty());
+    let tracks = tracker.step([detection(0.0, 2)]).unwrap();
+    assert_eq!(tracks.len(), 1);
+    assert_eq!(tracks[0].missed_frames, 0);
+    assert_eq!(tracks[0].score, 1.0);
+}
+
+#[test]
+fn unrelated_observations_create_new_tracks() {
+    let mut tracker = MultiObjectTracker::default();
+    let first = tracker.step([detection(0.0, 2)]).unwrap().remove(0);
+    let tracks = tracker.step([detection(100.0, 2)]).unwrap();
+    assert_eq!(tracks.len(), 2);
+    assert_ne!(tracker.matched_ids()[0], first.id);
+    assert_eq!(tracks[0].missed_frames, 1);
+    assert_eq!(tracks[1].missed_frames, 0);
+}
+
+#[test]
+fn appearance_is_available_from_the_first_detection() {
+    let mut tracker = MultiObjectTracker::new(TrackerConfig {
+        appearance_weight: 0.5,
+        ..Default::default()
+    })
+    .unwrap();
+    let mut red = detection(0.0, 2);
+    red.feature = Some(vec![1.0, 0.0]);
+    let mut blue = detection(0.0, 2);
+    blue.feature = Some(vec![0.0, 1.0]);
+    let first = tracker.step([red.clone(), blue.clone()]).unwrap();
+    tracker.step([blue, red]).unwrap();
+    assert_eq!(
+        tracker.matched_ids(),
+        &[first[1].id.clone(), first[0].id.clone()]
     );
+}
 
-    let mut mot = MultiObjectTracker::new(0.1, model_spec, Some(matching_fn), None, None, None);
-    let mut object_box = na::DMatrix::from_row_slice(1, 4, &[1., 1., 10., 10.]);
-    let det = Detection {
-        _box: Some(object_box.clone()),
-        score: 1.,
-        class_id: 1,
-        feature: None,
-    };
-    mot.step(vec![det]);
+#[test]
+fn score_is_smoothed_and_class_uses_all_observations() {
+    let mut tracker = MultiObjectTracker::new(TrackerConfig {
+        smoothing: 0.5,
+        ..Default::default()
+    })
+    .unwrap();
+    let mut observed = detection(0.0, 2);
+    observed.score = 0.8;
+    observed.class_id = Some(2);
+    tracker.step([observed.clone()]).unwrap();
+    observed.score = 0.4;
+    observed.class_id = Some(1);
+    let second = tracker.step([observed.clone()]).unwrap().remove(0);
+    assert_relative_eq!(second.score, 0.6);
+    assert_eq!(second.class_id, Some(2)); // deterministic tie
+    let third = tracker.step([observed]).unwrap().remove(0);
+    assert_relative_eq!(third.score, 0.5);
+    assert_eq!(third.class_id, Some(1));
+}
 
-    let tracks = mot.active_tracks();
-    let object_id = tracks[0].id.clone();
-
-    for _step in 0..10 {
-        object_box += na::DMatrix::from_row_slice(1, 4, &[1., 1., 1., 1.]);
-
-        let det = Detection {
-            _box: Some(object_box.clone()),
-            score: 1.,
-            class_id: 1,
-            feature: None,
-        };
-        mot.step(vec![det]);
-
-        let track = &tracks[0];
-        assert!(object_id == track.id);
+#[test]
+fn size_can_be_tracked_with_velocity_or_acceleration() {
+    for size in [
+        MotionModel::ConstantVelocity,
+        MotionModel::ConstantAcceleration,
+    ] {
+        let mut tracker = MultiObjectTracker::new(TrackerConfig {
+            model: ModelConfig {
+                size,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .unwrap();
+        let first = tracker.step([detection(0.0, 2)]).unwrap().remove(0);
+        for frame in 1..50 {
+            let width = 10.0 + frame as f32 * 0.1;
+            let observed = Detection::new(BoundingBox::new([0.0, 0.0], [width, 10.0]).unwrap());
+            let track = tracker.step([observed]).unwrap().remove(0);
+            assert_eq!(track.id, first.id);
+            assert_relative_eq!(track.bounds.extent(0), width, epsilon = 0.1);
+        }
     }
 }

@@ -22,7 +22,8 @@ or another source and want to follow objects over time.
 - Input validation and track metadata such as score, supplied class ID, and missed
   frame count.
 - A browser playground with random obstacles, different object speeds and motion
-  patterns, live object additions, and observed/predicted track displays.
+  patterns, live object additions, and observed/predicted track displays. Its React
+  UI manages settings and results while Canvas draws the simulation.
 - Native simulation and MOT16 viewers, tests, and benchmark code.
 
 ## What is not implemented
@@ -88,7 +89,14 @@ For 2D boxes, use finite coordinates with `right > left` and `bottom > top`.
 
 ### Browser usage
 
-You also need Node.js, npm, and wasm-pack. If wasm-pack is not installed:
+Node.js and pnpm versions are defined in [.tool-versions](.tool-versions).
+With asdf and its Node.js and pnpm plugins installed, run this from the repository root:
+
+```sh
+asdf install
+```
+
+You also need wasm-pack. If it is not installed:
 
 ```sh
 cargo install wasm-pack --locked
@@ -98,12 +106,12 @@ From the repository root:
 
 ```sh
 cd motrs_wasm
-npm ci
-npm run serve
+pnpm install --frozen-lockfile
+pnpm run serve
 ```
 
-Open [http://127.0.0.1:8080](http://127.0.0.1:8080) after the WebAssembly and
-webpack builds finish. Keep the command running while using the demo.
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080) after the WebAssembly build
+finishes and Vite starts. Keep the command running while using the demo.
 
 1. Set the initial ball count (0–50), object size, minimum/maximum speed, and motion.
 2. Choose the number, size, and shapes of obstacles: squares, stars, circles, and triangles.
@@ -127,7 +135,7 @@ To inspect the JavaScript interface, expand **Inspect this frame's input and out
 in the demo. Its basic usage is:
 
 ```javascript
-import init, { MOT } from "./pkg";
+import init, { MOT } from "./pkg/index.js";
 
 await init();
 const tracker = MOT.with_max_missed_frames(20);
@@ -137,8 +145,15 @@ tracker.step([]); // Advance a frame without detections.
 tracker.free();
 ```
 
-`npm run build` generates the browser example in `motrs_wasm/dist/` for serving
-over HTTP. These scripts currently build development artifacts.
+`pnpm run build` generates the browser example in `motrs_wasm/dist/` for serving
+over HTTP; `pnpm run preview` serves that build locally. Vite bundles the browser
+assets for production; the Rust build currently uses wasm-pack's development profile.
+Use `pnpm install --frozen-lockfile` to install the exact dependencies recorded in
+`pnpm-lock.yaml`. The pnpm version is also pinned in `package.json`.
+
+The browser source is split into [React components](motrs_wasm/App.jsx),
+[scene and tracking logic](motrs_wasm/playground.js), and
+[settings validation](motrs_wasm/settings.js).
 
 ## More examples and checks
 
@@ -158,6 +173,12 @@ Run the core and WebAssembly facade tests, or generate the Rust API documentatio
 ```sh
 cargo test --locked -p motrs -p motrs_wasm
 cargo doc --locked -p motrs --no-deps
+```
+
+Check the browser example's dependencies from `motrs_wasm/`:
+
+```sh
+pnpm audit
 ```
 
 ## License

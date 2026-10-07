@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       CARGO_TERM_COLOR: always
     steps:
@@ -29,5 +29,45 @@ jobs:
         run: cargo test --locked --workspace --all-targets
       - name: Test documentation
         run: cargo test --locked --workspace --doc
-      - name: Build WebAssembly
-        run: cargo build --locked -p motrs_wasm --target wasm32-unknown-unknown
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .tool-versions
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --version 0.15.0 --locked
+      - name: Build WebAssembly package
+        run: node scripts/build-wasm.cjs
+        working-directory: motrs_wasm
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wasm-package
+          path: motrs_wasm/pkg/
+          if-no-files-found: error
+          retention-days: 1
+
+  browser:
+    needs: check
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: motrs_wasm
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .tool-versions
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: motrs_wasm/package.json
+          cache: true
+          cache_dependency_path: motrs_wasm/pnpm-lock.yaml
+      - uses: actions/download-artifact@v8
+        with:
+          name: wasm-package
+          path: motrs_wasm/pkg/
+      - name: Install browser dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Audit browser dependencies
+        run: pnpm audit
+      - name: Build browser example
+        run: pnpm run build:browser

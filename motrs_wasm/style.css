@@ -1,0 +1,249 @@
+* {
+    box-sizing: border-box;
+}
+body {
+    margin: 0;
+    background: #f6f8fb;
+    color: #1e293b;
+    font-family: system-ui, sans-serif;
+}
+main {
+    max-width: 1000px;
+    margin: 36px auto;
+    padding: 0 20px;
+}
+h1 {
+    margin: 0 0 8px;
+    font-size: 28px;
+}
+p {
+    line-height: 1.7;
+}
+.intro {
+    color: #64748b;
+    margin: 0 0 20px;
+}
+fieldset {
+    border: 0;
+    padding: 0;
+    margin: 0 0 16px;
+    min-width: 0;
+}
+#playback legend {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+}
+.settings-panel {
+    padding: 16px;
+    background: white;
+    border: 1px solid #dbe2ec;
+    border-radius: 8px;
+}
+.settings-panel legend {
+    padding: 0 8px;
+    font-weight: 650;
+}
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px 16px;
+}
+.settings-grid label {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 5px;
+}
+input[type="number"],
+select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 5px;
+    font: inherit;
+    color: inherit;
+    background: white;
+}
+.shape-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 16px 0;
+    align-items: center;
+}
+.shape-picker strong {
+    font-size: 14px;
+}
+.settings-note {
+    color: #64748b;
+    font-size: 13px;
+    margin: 8px 0;
+}
+#settings-message {
+    margin: 10px 0 0;
+    min-height: 1.5em;
+    font-size: 13px;
+    color: #475569;
+}
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+button {
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: white;
+    color: inherit;
+    padding: 9px 14px;
+    font: inherit;
+    cursor: pointer;
+}
+button:hover {
+    background: #eff6ff;
+}
+button.primary {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: white;
+}
+button.primary:hover {
+    background: #1d4ed8;
+}
+button:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+    outline: 3px solid #93c5fd;
+    outline-offset: 3px;
+}
+label {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 14px;
+}
+canvas {
+    cursor: crosshair;
+    display: block;
+    width: 100%;
+    height: auto;
+    background: white;
+    border: 1px solid #dbe2ec;
+    border-radius: 8px;
+}
+.legend,
+.stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 20px;
+    margin: 12px 0;
+    font-size: 14px;
+}
+.legend {
+    color: #64748b;
+}
+.legend span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.key {
+    display: inline-block;
+    width: 18px;
+    height: 14px;
+}
+.truth {
+    background: #cbd5e1;
+    border-radius: 50%;
+}
+.obstacle {
+    background: #64748b;
+}
+.detection {
+    border: 1.5px dashed #334155;
+}
+.track {
+    border: 2px solid #2563eb;
+}
+.predicted {
+    border: 2px dashed #2563eb;
+}
+.stats strong {
+    font-variant-numeric: tabular-nums;
+}
+#status {
+    min-height: 2em;
+    font-size: 14px;
+    color: #475569;
+}
+.table-scroll {
+    overflow-x: auto;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    font-size: 14px;
+}
+th,
+td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid #e2e8f0;
+    white-space: nowrap;
+}
+td {
+    font-family: ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+}
+details {
+    margin-top: 20px;
+}
+summary {
+    cursor: pointer;
+}
+.json {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+pre {
+    max-height: 280px;
+    overflow: auto;
+    background: #eaf0f7;
+    padding: 12px;
+    border-radius: 6px;
+    font-size: 12px;
+}
+h2 {
+    font-size: 15px;
+}
+.help {
+    font-size: 14px;
+    color: #64748b;
+}
+@media (max-width: 600px) {
+    main {
+        margin-top: 24px;
+        padding: 0 12px;
+    }
+    h1 {
+        font-size: 24px;
+    }
+    .settings-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .json {
+        grid-template-columns: 1fr;
+    }
+    td {
+        font-size: 12px;
+    }
+}

@@ -145,9 +145,9 @@ tracker.step([]); // Advance a frame without detections.
 tracker.free();
 ```
 
-`pnpm run build` generates the browser example in `motrs_wasm/dist/` for serving
-over HTTP; `pnpm run preview` serves that build locally. Vite bundles the browser
-assets for production; the Rust build currently uses wasm-pack's development profile.
+`pnpm run build` compiles WebAssembly in release mode and generates the browser
+example in `motrs_wasm/dist/`. `pnpm run preview` serves that build locally.
+`pnpm run serve` uses the WebAssembly development profile.
 Use `pnpm install --frozen-lockfile` to install the exact dependencies recorded in
 `pnpm-lock.yaml`. The pnpm version is also pinned in `package.json`.
 
@@ -173,6 +173,12 @@ Run the core and WebAssembly facade tests, or generate the Rust API documentatio
 ```sh
 cargo test --locked -p motrs -p motrs_wasm
 cargo doc --locked -p motrs --no-deps
+```
+
+Measure tracker time per frame for 1, 10, 50, and 200 moving objects:
+
+```sh
+cargo bench --locked -p motrs --bench main -- "tracking frame"
 ```
 
 Check the browser example's dependencies from `motrs_wasm/`:

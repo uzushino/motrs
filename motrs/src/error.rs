@@ -17,7 +17,7 @@ impl fmt::Display for Error {
             Self::InvalidDetection { index, reason } => {
                 write!(f, "invalid detection {index}: {reason}")
             }
-            Self::NumericalFailure => f.write_str("Kalman filter decomposition failed"),
+            Self::NumericalFailure => f.write_str("Kalman filter update failed"),
         }
     }
 }

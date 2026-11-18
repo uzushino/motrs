@@ -17,19 +17,35 @@ impl KalmanFilter {
 
     /// Advance the estimated center, velocity and size by one frame.
     /// P grows by Q because motion between observations is uncertain.
-    pub fn predict(&mut self, model: &MotionMatrices) {
-        self.state = &model.transition * &self.state;
-        self.covariance = &model.transition * &self.covariance * model.transition.transpose()
-            + &model.process_noise;
+    pub fn predict(&self, model: &MotionMatrices) -> Self {
+        Self {
+            state: &model.transition * &self.state,
+            covariance: &model.transition * &self.covariance * model.transition.transpose()
+                + &model.process_noise,
+        }
     }
 
     /// Blend the observation with the prediction according to their uncertainty.
     pub fn update(&mut self, model: &MotionMatrices, bounds: &BoundingBox) -> Result<(), Error> {
-        // innovation = observed center/size - predicted center/size (z - Hx).
-        let residual = model.measurement(bounds) - &model.observation * &self.state;
-        let state_measurement_covariance = &self.covariance * model.observation.transpose();
-        let innovation_covariance =
-            &model.observation * &state_measurement_covariance + &model.measurement_noise;
+        // Each row of H selects one state component. Gather those entries directly.
+        let observed = &model.observed_state_indices;
+        let mut residual = model.measurement(bounds);
+        for (row, &state_index) in observed.iter().enumerate() {
+            residual[(row, 0)] -= self.state[(state_index, 0)];
+        }
+        let state_size = self.state.nrows();
+        let state_measurement_covariance = Mat::from_fn(state_size, observed.len(), |row, col| {
+            self.covariance[(row, observed[col])]
+        });
+        let innovation_covariance = Mat::from_fn(observed.len(), observed.len(), |row, col| {
+            state_measurement_covariance[(observed[row], col)] + model.measurement_noise[(row, col)]
+        });
+        if innovation_covariance
+            .col_iter()
+            .any(|column| column.iter().any(|value| !value.is_finite()))
+        {
+            return Err(Error::NumericalFailure);
+        }
 
         // S K^T = (P H^T)^T. Solving this system avoids constructing an inverse.
         let decomposition = innovation_covariance
@@ -42,8 +58,12 @@ impl KalmanFilter {
         self.state = &self.state + &gain * residual;
 
         // Joseph form protects symmetry and positive semidefiniteness.
-        let correction = Mat::<f32>::identity(self.state.nrows(), self.state.nrows())
-            - &gain * &model.observation;
+        let mut correction = Mat::<f32>::identity(state_size, state_size);
+        for (col, &state_index) in observed.iter().enumerate() {
+            for row in 0..state_size {
+                correction[(row, state_index)] -= gain[(row, col)];
+            }
+        }
         self.covariance = &correction * &self.covariance * correction.transpose()
             + &gain * &model.measurement_noise * gain.transpose();
         Ok(())
@@ -80,7 +100,7 @@ mod tests {
         let model = MotionMatrices::new(&ModelConfig::default(), 0.1);
         let mut filter = KalmanFilter::new(&model, &BoundingBox::new([0.0; 2], [10.0; 2]).unwrap());
         for frame in 1..100 {
-            filter.predict(&model);
+            filter = filter.predict(&model);
             let offset = frame as f32 * 0.1;
             filter
                 .update(
@@ -114,7 +134,7 @@ mod tests {
         let mut filter = KalmanFilter::new(&model, &BoundingBox::new([0.0], [2.0]).unwrap());
         filter.state[(1, 0)] = 3.0;
         filter.state[(2, 0)] = 4.0;
-        filter.predict(&model);
+        let filter = filter.predict(&model);
         assert_eq!(filter.state[(0, 0)], 15.0); // 1 + 3*2 + 4*2^2/2
         assert_eq!(filter.state[(1, 0)], 11.0);
         assert_eq!(filter.state[(2, 0)], 4.0);

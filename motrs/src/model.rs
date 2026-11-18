@@ -6,7 +6,7 @@ use faer::{Mat, Scale};
 pub(crate) struct MotionMatrices {
     pub transition: Mat<f32>,
     pub process_noise: Mat<f32>,
-    pub observation: Mat<f32>,
+    pub observed_state_indices: Vec<usize>,
     pub measurement_noise: Mat<f32>,
     pub initial_covariance: Mat<f32>,
     dimensions: usize,
@@ -22,7 +22,7 @@ impl MotionMatrices {
         let measurement_size = config.dimensions * 2;
         let mut transition = Mat::zeros(state_size, state_size);
         let mut process_noise = Mat::zeros(state_size, state_size);
-        let mut observation = Mat::zeros(measurement_size, state_size);
+        let mut observed_state_indices = Vec::with_capacity(measurement_size);
         let mut measurement_noise = Mat::zeros(measurement_size, measurement_size);
         let mut state_offset = 0;
 
@@ -50,7 +50,7 @@ impl MotionMatrices {
                 process_noise
                     .submatrix_mut(state_offset, state_offset, stride, stride)
                     .copy_from(&axis_noise);
-                observation[(measurement_group + axis, state_offset)] = 1.0;
+                observed_state_indices.push(state_offset);
                 measurement_noise[(measurement_group + axis, measurement_group + axis)] =
                     measurement_variance;
                 state_offset += stride;
@@ -59,7 +59,7 @@ impl MotionMatrices {
         Self {
             transition,
             process_noise,
-            observation,
+            observed_state_indices,
             measurement_noise,
             initial_covariance: Mat::<f32>::identity(state_size, state_size)
                 * Scale(config.initial_state_variance),
@@ -100,6 +100,34 @@ impl MotionMatrices {
             max.push(center + half_extent);
         }
         BoundingBox::new(min, max)
+    }
+
+    pub fn predicted_bounds(
+        &self,
+        state: &mut Mat<f32>,
+        covariance: &mut Mat<f32>,
+        previous: &BoundingBox,
+    ) -> Result<BoundingBox, Error> {
+        for axis in 0..self.dimensions {
+            let index = self.dimensions * self.position_stride + axis * self.size_stride;
+            let extent = state[(index, 0)];
+            if extent.is_finite() && extent <= 0.0 {
+                // Restart the affected size axis from its last valid estimate.
+                state[(index, 0)] = previous.extent(axis);
+                for derivative in 1..self.size_stride {
+                    state[(index + derivative, 0)] = 0.0;
+                }
+                covariance
+                    .submatrix_mut(index, index, self.size_stride, self.size_stride)
+                    .copy_from(self.initial_covariance.submatrix(
+                        index,
+                        index,
+                        self.size_stride,
+                        self.size_stride,
+                    ));
+            }
+        }
+        self.bounds(state)
     }
 }
 
@@ -152,10 +180,15 @@ mod tests {
             let bounds = BoundingBox::new(vec![10.0; dimensions], vec![20.0; dimensions]).unwrap();
             let state = model.initial_state(&bounds);
             assert_eq!(model.bounds(&state).unwrap(), bounds);
-            let observation = &model.observation * state;
+            let observation = model.measurement(&bounds);
             for axis in 0..dimensions {
                 assert_relative_eq!(observation[(axis, 0)], 15.0);
                 assert_relative_eq!(observation[(dimensions + axis, 0)], 10.0);
+                assert_eq!(state[(model.observed_state_indices[axis], 0)], 15.0);
+                assert_eq!(
+                    state[(model.observed_state_indices[dimensions + axis], 0)],
+                    10.0
+                );
             }
         }
     }

@@ -8,7 +8,7 @@
 		"build:wasm": "node scripts/build-wasm.cjs",
 		"build:browser": "vite build",
 		"build": "pnpm run build:wasm && pnpm run build:browser",
-		"serve": "pnpm run build:wasm && vite",
+		"serve": "pnpm run build:wasm --dev && vite",
 		"preview": "vite preview"
 	},
 	"dependencies": {

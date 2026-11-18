@@ -27,9 +27,15 @@ pub struct ModelConfig {
     pub position: MotionModel,
     /// Motion assumptions for the box extent on each axis.
     pub size: MotionModel,
-    /// Driving motion-noise variance. Larger values allow motion to change faster.
+    /// Per-frame process-noise variance for the center.
+    ///
+    /// The noise is applied to position for a static model, to the assumed
+    /// acceleration over the frame for constant velocity, and to the change
+    /// in acceleration for constant acceleration. Retune when changing the
+    /// motion model or frame interval.
     pub position_process_variance: f32,
-    /// Driving size-noise variance; zero assumes exact size dynamics.
+    /// Per-frame process-noise variance for the extent, with the same model
+    /// conventions as [Self::position_process_variance].
     pub size_process_variance: f32,
     /// Center observation variance. Larger values trust detections less.
     pub position_measurement_variance: f32,

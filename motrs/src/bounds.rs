@@ -56,7 +56,10 @@ impl BoundingBox {
         for axis in 0..self.dimensions() {
             let low = self.min[axis].max(other.min[axis]) as f64;
             let high = self.max[axis].min(other.max[axis]) as f64;
-            intersection *= (high - low).max(0.0);
+            if high <= low {
+                return 0.0;
+            }
+            intersection *= high - low;
             left_volume *= f64::from(self.max[axis]) - f64::from(self.min[axis]);
             right_volume *= f64::from(other.max[axis]) - f64::from(other.min[axis]);
         }

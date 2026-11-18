@@ -8,11 +8,12 @@ const flags = process.env.CARGO_ENCODED_RUSTFLAGS
     : (process.env.RUSTFLAGS || "").split(/\s+/).filter(Boolean);
 flags.push(`--remap-path-prefix=${homedir()}=/local`);
 
+const profile = process.argv.includes("--dev") ? "--dev" : "--release";
 const result = spawnSync(
     "wasm-pack",
     [
         "build",
-        "--dev",
+        profile,
         "--target",
         "web",
         "--out-dir",

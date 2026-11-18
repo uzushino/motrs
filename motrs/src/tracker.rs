@@ -43,6 +43,12 @@ struct TrackState {
     class_votes: BTreeMap<i64, u64>,
 }
 
+struct PredictedTrack {
+    kalman: KalmanFilter,
+    bounds: BoundingBox,
+    detection_index: Option<usize>,
+}
+
 impl TrackState {
     fn new(model: &MotionMatrices, detection: &Detection) -> Self {
         let mut class_votes = BTreeMap::new();
@@ -65,28 +71,23 @@ impl TrackState {
         }
     }
 
-    fn predict(&mut self, model: &MotionMatrices) -> bool {
-        self.kalman.predict(model);
-        self.snapshot.age += 1;
-        match model.bounds(&self.kalman.state) {
-            Ok(bounds) => {
-                self.snapshot.bounds = bounds;
-                true
-            }
-            Err(_) => false,
-        }
+    fn predict(&self, model: &MotionMatrices) -> Option<PredictedTrack> {
+        let mut kalman = self.kalman.predict(model);
+        let bounds = model
+            .predicted_bounds(
+                &mut kalman.state,
+                &mut kalman.covariance,
+                &self.snapshot.bounds,
+            )
+            .ok()?;
+        Some(PredictedTrack {
+            kalman,
+            bounds,
+            detection_index: None,
+        })
     }
 
-    fn update(
-        &mut self,
-        model: &MotionMatrices,
-        detection: &Detection,
-        smoothing: f32,
-    ) -> Result<(), Error> {
-        self.kalman.update(model, &detection.bounds)?;
-        self.snapshot.bounds = model
-            .bounds(&self.kalman.state)
-            .map_err(|_| Error::NumericalFailure)?;
+    fn record_detection(&mut self, detection: &Detection, smoothing: f32) {
         self.snapshot.hits += 1;
         self.snapshot.missed_frames = 0;
         self.snapshot.score = smoothing * self.snapshot.score + (1.0 - smoothing) * detection.score;
@@ -109,7 +110,6 @@ impl TrackState {
                 _ => self.feature = Some(feature.clone()),
             }
         }
-        Ok(())
     }
 }
 
@@ -149,18 +149,36 @@ impl MultiObjectTracker {
     }
 
     /// Advance one frame. Pass an empty collection when no objects are observed.
-    /// All detections are validated before any track is changed.
+    /// On error, the tracker stays at the last successful frame.
     pub fn step(
         &mut self,
         detections: impl IntoIterator<Item = Detection>,
     ) -> Result<Vec<Track>, Error> {
         let detections = detections.into_iter().collect::<Vec<_>>();
         self.validate_detections(&detections)?;
-        self.predict_tracks();
-        let matches = self.associate(&detections);
-        let (matched_tracks, matched_detections) = self.update_matches(&detections, &matches)?;
-        self.retire_unmatched(&matched_tracks);
-        self.create_unmatched(&detections, &matched_detections);
+        let mut predictions = self
+            .tracks
+            .iter()
+            .map(|track| track.predict(&self.model))
+            .collect::<Vec<_>>();
+        for Match {
+            track_index,
+            detection_index,
+        } in self.associate(&predictions, &detections)
+        {
+            let prediction = predictions[track_index]
+                .as_mut()
+                .expect("only valid predictions can match");
+            prediction
+                .kalman
+                .update(&self.model, &detections[detection_index].bounds)?;
+            prediction.bounds = self
+                .model
+                .bounds(&prediction.kalman.state)
+                .map_err(|_| Error::NumericalFailure)?;
+            prediction.detection_index = Some(detection_index);
+        }
+        self.commit_frame(predictions, &detections);
         Ok(self.active_tracks())
     }
 
@@ -207,17 +225,25 @@ impl MultiObjectTracker {
         Ok(())
     }
 
-    fn predict_tracks(&mut self) {
-        self.tracks.retain_mut(|track| track.predict(&self.model));
-    }
-
-    fn associate(&self, detections: &[Detection]) -> Vec<Match> {
+    fn associate(
+        &self,
+        predictions: &[Option<PredictedTrack>],
+        detections: &[Detection],
+    ) -> Vec<Match> {
+        if detections.is_empty() {
+            return Vec::new();
+        }
         let candidates = self
             .tracks
             .iter()
-            .map(|track| Candidate {
-                bounds: &track.snapshot.bounds,
-                feature: track.feature.as_deref(),
+            .zip(predictions)
+            .enumerate()
+            .filter_map(|(track_index, (track, prediction))| {
+                Some(Candidate {
+                    track_index,
+                    bounds: &prediction.as_ref()?.bounds,
+                    feature: track.feature.as_deref(),
+                })
             })
             .collect::<Vec<_>>();
         associate(
@@ -228,50 +254,35 @@ impl MultiObjectTracker {
         )
     }
 
-    fn update_matches(
-        &mut self,
-        detections: &[Detection],
-        matches: &[Match],
-    ) -> Result<(Vec<bool>, Vec<bool>), Error> {
-        let mut matched_tracks = vec![false; self.tracks.len()];
-        let mut matched_detections = vec![false; detections.len()];
-        self.matched_ids = vec![String::new(); detections.len()];
-        for &Match {
-            track_index,
-            detection_index,
-        } in matches
-        {
-            let track = &mut self.tracks[track_index];
-            track.update(
-                &self.model,
-                &detections[detection_index],
-                self.config.smoothing,
-            )?;
-            self.matched_ids[detection_index] = track.snapshot.id.clone();
-            matched_tracks[track_index] = true;
-            matched_detections[detection_index] = true;
-        }
-        Ok((matched_tracks, matched_detections))
-    }
-
-    fn retire_unmatched(&mut self, matched_tracks: &[bool]) {
-        for (track, &matched) in self.tracks.iter_mut().zip(matched_tracks) {
-            if !matched {
+    fn commit_frame(&mut self, predictions: Vec<Option<PredictedTrack>>, detections: &[Detection]) {
+        let mut predictions = predictions.into_iter();
+        let mut matched_ids = vec![String::new(); detections.len()];
+        self.tracks.retain_mut(|track| {
+            let Some(prediction) = predictions.next().expect("one prediction per track") else {
+                return false;
+            };
+            track.kalman = prediction.kalman;
+            track.snapshot.bounds = prediction.bounds;
+            track.snapshot.age += 1;
+            if let Some(index) = prediction.detection_index {
+                track.record_detection(&detections[index], self.config.smoothing);
+                matched_ids[index] = track.snapshot.id.clone();
+            } else {
+                if track.snapshot.missed_frames == self.config.max_missed_frames {
+                    return false;
+                }
                 track.snapshot.missed_frames += 1;
             }
-        }
-        self.tracks
-            .retain(|track| track.snapshot.missed_frames <= self.config.max_missed_frames);
-    }
-
-    fn create_unmatched(&mut self, detections: &[Detection], matched_detections: &[bool]) {
-        for (index, detection) in detections.iter().enumerate() {
-            if !matched_detections[index] {
+            true
+        });
+        for (detection, matched_id) in detections.iter().zip(&mut matched_ids) {
+            if matched_id.is_empty() {
                 let track = TrackState::new(&self.model, detection);
-                self.matched_ids[index] = track.snapshot.id.clone();
+                *matched_id = track.snapshot.id.clone();
                 self.tracks.push(track);
             }
         }
+        self.matched_ids = matched_ids;
     }
 }
 

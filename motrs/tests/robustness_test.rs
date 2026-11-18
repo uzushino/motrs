@@ -1,4 +1,6 @@
-use motrs::{BoundingBox, Detection, Error, ModelConfig, MultiObjectTracker, TrackerConfig};
+use motrs::{
+    BoundingBox, Detection, Error, ModelConfig, MotionModel, MultiObjectTracker, TrackerConfig,
+};
 
 fn detection() -> Detection {
     Detection::new(BoundingBox::new([0.0; 2], [10.0; 2]).unwrap())
@@ -42,6 +44,51 @@ fn invalid_inputs_do_not_advance_existing_tracks() {
         assert_eq!(before[0].hits, after[0].hits);
         assert_eq!(tracker.matched_ids(), ids);
     }
+}
+
+#[test]
+fn a_failed_numerical_update_does_not_commit_any_track() {
+    let mut tracker = MultiObjectTracker::new(TrackerConfig {
+        model: ModelConfig {
+            position: MotionModel::Static,
+            initial_state_variance: 1e38,
+            position_process_variance: 1.3e38,
+            ..Default::default()
+        },
+        max_missed_frames: 1,
+        ..Default::default()
+    })
+    .unwrap();
+    let distant = Detection::new(BoundingBox::new([100.0; 2], [110.0; 2]).unwrap());
+    tracker.step([detection(), distant.clone()]).unwrap();
+    let before = tracker.step([detection()]).unwrap();
+    let matched_ids = tracker.matched_ids().to_vec();
+    let mut moved = Detection::new(BoundingBox::new([1.0; 2], [11.0; 2]).unwrap());
+    moved.score = 0.5;
+
+    // The first track can update, but the second track's covariance has overflowed.
+    for _ in 0..2 {
+        assert!(matches!(
+            tracker.step([moved.clone(), distant.clone()]),
+            Err(Error::NumericalFailure)
+        ));
+        let after = tracker.active_tracks();
+        assert_eq!(after.len(), before.len());
+        for (previous, current) in before.iter().zip(after) {
+            assert_eq!(previous.id, current.id);
+            assert_eq!(previous.bounds, current.bounds);
+            assert_eq!(previous.age, current.age);
+            assert_eq!(previous.hits, current.hits);
+            assert_eq!(previous.score, current.score);
+            assert_eq!(previous.missed_frames, current.missed_frames);
+        }
+        assert_eq!(tracker.matched_ids(), matched_ids);
+    }
+    let tracks = tracker.step([moved]).unwrap();
+    assert_eq!(tracks.len(), 1);
+    assert_eq!(tracks[0].id, before[0].id);
+    assert_eq!(tracks[0].age, before[0].age + 1);
+    assert_eq!(tracks[0].hits, before[0].hits + 1);
 }
 
 #[test]

@@ -168,3 +168,39 @@ fn size_can_be_tracked_with_velocity_or_acceleration() {
         }
     }
 }
+
+#[test]
+fn a_shrinking_box_keeps_its_id_after_a_nonpositive_size_prediction() {
+    for size in [
+        MotionModel::ConstantVelocity,
+        MotionModel::ConstantAcceleration,
+    ] {
+        let mut tracker = MultiObjectTracker::new(TrackerConfig {
+            model: ModelConfig {
+                size,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .unwrap();
+        let centered_detection = |width: f32| {
+            Detection::new(
+                BoundingBox::new([100.0 - width / 2.0, 95.0], [100.0 + width / 2.0, 105.0])
+                    .unwrap(),
+            )
+        };
+        let first = tracker.step([centered_detection(100.0)]).unwrap().remove(0);
+        for width in [70.0, 40.0, 10.0, 10.0] {
+            let tracks = tracker.step([centered_detection(width)]).unwrap();
+            assert_eq!(tracks.len(), 1);
+            assert_eq!(tracks[0].id, first.id);
+            assert_eq!(tracks[0].missed_frames, 0);
+        }
+        let track = tracker.step([]).unwrap().remove(0);
+        assert_eq!(track.id, first.id);
+        assert_eq!(track.hits, 5);
+        assert_eq!(track.missed_frames, 1);
+        assert_relative_eq!(track.bounds.extent(0), 10.0, epsilon = 0.1);
+        assert_relative_eq!(track.bounds.extent(1), 10.0, epsilon = 0.1);
+    }
+}
